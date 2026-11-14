@@ -435,7 +435,7 @@ export function stepFlightSimulation(
   const structure = spacecraftConfig.structureId
     ? PARTS_BY_ID[spacecraftConfig.structureId]
     : undefined;
-  const power = spacecraftConfig.powerId
+  const powerPart = spacecraftConfig.powerId
     ? PARTS_BY_ID[spacecraftConfig.powerId]
     : undefined;
   const computer = spacecraftConfig.computerId
@@ -970,17 +970,99 @@ export function stepFlightSimulation(
         inEclipse || isInEclipseShadow(pos, mars.pos, MARS_RADIUS_M, SUN_DIRECTION);
     }
 
-    let powerGenW = 0;
-    if (power?.baseOutputW) {
-      if (power.isSolar) {
-        powerGenW = inEclipse ? 0 : power.baseOutputW * mission.irradianceFactor;
-      } else {
-        powerGenW = power.baseOutputW;
+    // Compute thermal heater draws (aligned with spacecraftValidator)
+    function getThermalHeaterCapacity(thermal: SpacecraftPart | undefined): number {
+      if (!thermal) return 0;
+      const tier = thermal.thermalTier ?? 0;
+      switch (tier) {
+        case 1: return 50;
+        case 2: return 150;
+        case 3: return 300;
+        case 4: return 500;
+        default: return 0;
+      }
+    }
+    function getThermalRejectionCapacity(thermal: SpacecraftPart | undefined): number {
+      if (!thermal) return 0;
+      const tier = thermal.thermalTier ?? 0;
+      switch (tier) {
+        case 1: return 200;
+        case 2: return 600;
+        case 3: return 1000;
+        case 4: return 2000;
+        default: return 0;
+      }
+    }
+    function computeAbsorbedSolarW(
+      _powerPart: SpacecraftPart | undefined,
+      solarDistanceAU: number,
+      inEclipse: boolean
+    ): number {
+      if (inEclipse) return 0;
+      const solarConstant = 1361;
+      const flux = solarConstant / (solarDistanceAU * solarDistanceAU);
+      const crossSection = 4;
+      const absorptivity = 0.3;
+      return flux * crossSection * absorptivity;
+    }
+    const internalHeatW = parts.reduce((s, p) => s + p.drawW, 0);
+    const absorbedSolarW = computeAbsorbedSolarW(powerPart, mission.solarDistanceAU, inEclipse);
+    const radiatorRejectionW = getThermalRejectionCapacity(thermal);
+    const heaterCapacity = getThermalHeaterCapacity(thermal);
+
+    // Thermal balance: radiator rejects heat up to its capacity
+    // In sunlit: heat input = internal + absorbed solar
+    // In shadow: heat input = internal only
+    // Heaters only needed if heat input < radiator capacity (cold soak)
+    // But radiator only rejects UP TO its capacity, so actual rejection = min(heatInput, radiatorCapacity)
+    // Therefore: netHeat = heatInput - actualRejection
+    // If netHeat < 0, need heater for |netHeat| (clamped to heaterCapacity)
+
+    let sunlitSurvivalHeaterW = 0;
+    let shadowSurvivalHeaterW = 0;
+
+    if (!inEclipse) {
+      // Sunlit: heat input = internal + absorbed solar
+      const heatInput = internalHeatW + absorbedSolarW;
+      const actualRejection = Math.min(heatInput, radiatorRejectionW);
+      const netHeat = heatInput - actualRejection;
+      if (netHeat < 0) {
+        sunlitSurvivalHeaterW = Math.min(Math.abs(netHeat), heaterCapacity);
+      }
+    } else {
+      // Shadow: heat input = internal only
+      const heatInput = internalHeatW;
+      const actualRejection = Math.min(heatInput, radiatorRejectionW);
+      const netHeat = heatInput - actualRejection;
+      if (netHeat < 0) {
+        shadowSurvivalHeaterW = Math.min(Math.abs(netHeat), heaterCapacity);
       }
     }
 
-    const baseDrawW = parts.reduce((s, p) => s + p.drawW, 0) + band.drawW;
-    const netPowerW = powerGenW - baseDrawW;
+    // Dual power modes: cruise vs peak
+    const commsDrawW = band.drawW;
+    const busDrawW = parts.reduce((s, p) => s + p.drawW, 0);
+    const cruisePowerW = busDrawW + commsDrawW + sunlitSurvivalHeaterW;
+    const adcsSlewDraw = adcs ? (adcs.drawW * 0.5) : 0;
+    const peakPowerW = cruisePowerW + (payload?.drawW ?? 0) + adcsSlewDraw;
+    // peakPowerW stored in coupledMetrics for margin checks
+    void peakPowerW;
+
+    // Power generation
+    let powerGenW = 0;
+    if (powerPart?.baseOutputW) {
+      if (powerPart.isSolar) {
+        powerGenW = inEclipse ? 0 : powerPart.baseOutputW * mission.irradianceFactor;
+      } else {
+        powerGenW = powerPart.baseOutputW;
+      }
+    }
+
+    // Use cruise power in sunlit, peak power during active operations
+    // For simplicity, use cruise as base; peak is for margin checks
+    const currentPowerModeW = inEclipse ? cruisePowerW + shadowSurvivalHeaterW : cruisePowerW + sunlitSurvivalHeaterW;
+    const netPowerW = powerGenW - currentPowerModeW;
+
     batteryWh = Math.max(
       0,
       Math.min(batteryMaxWh, batteryWh + (netPowerW * h) / 3600)
@@ -990,7 +1072,7 @@ export function stepFlightSimulation(
 
     lastInEclipse = inEclipse;
     lastPowerGenW = powerGenW;
-    lastPowerDrawW = baseDrawW;
+    lastPowerDrawW = currentPowerModeW;
 
     if (batteryWh <= 0) {
       status = 'FAILED';

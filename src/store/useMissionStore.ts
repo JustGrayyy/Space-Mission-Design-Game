@@ -9,14 +9,17 @@ import {
   createInitialFlightState,
   stepFlightSimulation,
 } from '../core/physicsEngine';
+import { computeCoupledMetrics } from '../core/spacecraftValidator';
 import type {
   CommsBandId,
+  CoupledMetrics,
   DebriefReport,
   DifficultyMode,
   FlightState,
   GamePhase,
   GroundConfig,
   MissionId,
+  PreviewCandidate,
   SpacecraftConfig,
   SubsystemCategory,
 } from '../core/types';
@@ -61,6 +64,12 @@ export interface MissionStoreState {
   flight: FlightState | null;
   flightControls: StoreFlightControls;
   debrief: DebriefReport | null;
+  // NEW: Hover preview state for HANGAR
+  hoveredCandidate: PreviewCandidate | null;
+  // NEW: Live coupled metrics (recomputed on every build change)
+  coupledMetrics: CoupledMetrics | null;
+  // NEW: Launch-time coupled metrics snapshot for FLIGHT/DEBRIEF
+  launchCoupledMetrics: CoupledMetrics | null;
 
   // Navigation & Setup Actions
   startSingleplayer: () => void;
@@ -106,6 +115,10 @@ export interface MissionStoreState {
   // Debrief Actions
   returnToHangarKeepDesign: () => void;
   restartCampaign: () => void;
+
+  // NEW: Coupled metrics & hover actions
+  setHoveredCandidate: (candidate: PreviewCandidate | null) => void;
+  recomputeCoupledMetrics: () => void;
 }
 
 const CATEGORY_TO_FIELD: Record<SubsystemCategory, keyof SpacecraftConfig> = {
@@ -140,6 +153,10 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
   debrief: null,
   tutorialOpen: false,
   tutorialAcknowledged: false,
+  // NEW: Coupled metrics state
+  hoveredCandidate: null,
+  coupledMetrics: null,
+  launchCoupledMetrics: null,
 
   startSingleplayer: () => {
     set({
@@ -243,6 +260,8 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
         [field]: partId,
       },
     }));
+    // Recompute coupled metrics after state update
+    get().recomputeCoupledMetrics();
   },
 
   clearSlot: (category) => {
@@ -253,6 +272,8 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
         [field]: null,
       },
     }));
+    // Recompute coupled metrics after state update
+    get().recomputeCoupledMetrics();
   },
 
   applyRecommendedLoadout: () => {
@@ -260,6 +281,8 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
     set({
       spacecraft: { ...RECOMMENDED_LOADOUTS[missionId] },
     });
+    // Recompute coupled metrics after state update
+    get().recomputeCoupledMetrics();
   },
 
   rolloutToGround: () => {
@@ -318,10 +341,23 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
         plannedLifetimeYears: rec.plannedLifetimeYears,
       },
     });
+    get().recomputeCoupledMetrics();
+  },
+
+  // NEW: Recompute live coupled metrics
+  recomputeCoupledMetrics: () => {
+    const { missionId, spacecraft, ground } = get();
+    const metrics = computeCoupledMetrics(missionId, spacecraft, ground);
+    set({ coupledMetrics: metrics });
+  },
+
+  // NEW: Set hover preview candidate
+  setHoveredCandidate: (candidate: PreviewCandidate | null) => {
+    set({ hoveredCandidate: candidate });
   },
 
   greenlightLiftoff: () => {
-    const { missionId, spacecraft, ground, difficulty } = get();
+    const { missionId, spacecraft, ground, difficulty, coupledMetrics } = get();
     const assist = difficulty === 'BEGINNER';
     const initialFlight = createInitialFlightState(
       missionId,
@@ -341,6 +377,8 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
         autoStage: assist,
         stageRequested: false,
       },
+      // Snapshot launch-time coupled metrics for FLIGHT/DEBRIEF
+      launchCoupledMetrics: coupledMetrics,
     });
   },
 
@@ -402,7 +440,8 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
         spacecraft,
         ground,
         nextFlight,
-        difficulty
+        difficulty,
+        state.launchCoupledMetrics ?? undefined
       );
       set({
         flight: nextFlight,
@@ -504,7 +543,8 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
       state.spacecraft,
       state.ground,
       failedFlight,
-      state.difficulty
+      state.difficulty,
+      state.launchCoupledMetrics ?? undefined
     );
     set({
       flight: failedFlight,
@@ -527,7 +567,12 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
         autoStage: true,
         stageRequested: false,
       },
+      // Clear launch snapshot and hover when returning to hangar
+      launchCoupledMetrics: null,
+      hoveredCandidate: null,
     });
+    // Recompute live metrics
+    get().recomputeCoupledMetrics();
   },
 
   restartCampaign: () => {
@@ -544,6 +589,10 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
       debrief: null,
       tutorialOpen: false,
       tutorialAcknowledged: false,
+      // Clear all coupled metrics state
+      coupledMetrics: null,
+      launchCoupledMetrics: null,
+      hoveredCandidate: null,
     });
   },
 }));

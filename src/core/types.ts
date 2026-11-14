@@ -86,7 +86,8 @@ export interface MissionSpec {
   targetDeltaVMs: number;
   budgetCapM: number;
   scheduleLimitMonths: number;
-  irradianceFactor: number;
+  solarDistanceAU: number;            // 1.0 (Earth/Moon), 1.52 (Mars) for 1/r^2 solar flux
+  irradianceFactor: number;           // 1/solarDistanceAU^2 (precomputed)
   eclipseDurationSec: number;
   requiredPayloadMatch: MissionId | 'SURFACE_LANDER';
   requiredAdcsTier: number;
@@ -156,6 +157,72 @@ export interface EngineeringConflict {
   realisticMessage: string;
 }
 
+export interface CoupledMetrics {
+  // Mass → Propulsion
+  payloadToLiftMarginKg: number;     // launcher payload cap - spacecraft dry mass
+  padTwr: number;                    // TWR at liftoff
+  stage1DeltaVMs: number;
+  stage2DeltaVMs: number;
+  totalDeltaVMs: number;
+  deltaVMarginMs: number;            // totalDeltaVMs - mission.targetDeltaVMs
+
+  // Solar Flux & Dual Power Modes
+  solarDistanceAU: number;           // 1.0 (Earth/Moon), 1.52 (Mars)
+  irradianceFactor: number;          // 1/r^2 = 1.0 at Earth, ~0.43 at Mars
+  cruisePowerW: number;              // bus + ADCS idle + sunlit heaters
+  peakPowerW: number;                // cruise + payload + comms + ADCS slew
+  sunlitGenerationW: number;         // solar * irradianceFactor (or RTG)
+  eclipseGenerationW: number;        // 0 (solar) or RTG output
+  netCruiseW: number;                // sunlitGenerationW - cruisePowerW
+  netPeakW: number;                  // sunlitGenerationW - peakPowerW
+
+  // Thermal Balance → Heater Draws
+  internalHeatW: number;             // sum of subsystem waste heat (drawW)
+  absorbedSolarW: number;            // solar flux absorbed by spacecraft
+  radiatorRejectionW: number;        // thermal subsystem heat rejection capacity
+  sunlitSurvivalHeaterW: number;     // heater draw when radiative cooling > heat input (sunlit)
+  shadowSurvivalHeaterW: number;     // heater draw in eclipse (clamped to thermal capacity)
+  thermalWarning: boolean;           // true if heater capacity exceeded
+  thermalCritical: boolean;          // true if cold-soak risk
+
+  // Eclipse Battery Endurance & Data Bus
+  eclipseLoadW: number;              // totalDrawW - eclipseGenerationW + shadowSurvivalHeaterW
+  eclipseEnduranceMin: number;       // (batteryWh * usableDoD * 60) / eclipseLoadW
+  requiredEclipseMin: number;        // mission.eclipseDurationSec / 60
+  dataBusMarginMbps: number;         // cpuMaxMbps - payloadDataRateMbps
+  commsDownlinkMbps: number;         // band.bandwidthMbps * mission.distanceCommsFactor
+
+  // Budget & Schedule
+  craftCostM: number;
+  launcherCostM: number;
+  totalCraftAndLauncherM: number;
+  groundCostM: number;
+  opsCostM: number;
+  totalCampaignCostM: number;
+  budgetMarginM: number;             // mission.budgetCapM - totalCampaignCostM
+  buildMonths: number;
+  scheduleMarginMonths: number;      // mission.scheduleLimitMonths - buildMonths
+}
+
+export interface HoverDelta {
+  deltaMassKg: number;
+  deltaCostM: number;
+  deltaScheduleDays: number;
+  deltaDvMs: number;
+  deltaTwr: number;
+  deltaCruisePowerW: number;
+  deltaPeakPowerW: number;
+  deltaEclipseMin: number;
+  deltaThermalW: number;
+}
+
+export interface PreviewCandidate {
+  category: SubsystemCategory;
+  partId: string;
+  coupledMetrics: CoupledMetrics;
+  deltas: HoverDelta;
+}
+
 export interface SpacecraftValidation {
   isComplete: boolean;
   isLaunchable: boolean;
@@ -195,6 +262,8 @@ export interface SpacecraftValidation {
   schedule: {
     buildMonths: number;
   };
+  // NEW: Coupled engineering metrics (single source of truth)
+  coupledMetrics: CoupledMetrics;
 }
 
 export interface GroundEvaluation {
