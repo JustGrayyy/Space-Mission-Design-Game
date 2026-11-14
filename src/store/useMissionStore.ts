@@ -73,6 +73,7 @@ export interface MissionStoreState {
 
   // Navigation & Setup Actions
   startSingleplayer: () => void;
+  backToTitle: () => void;
   setDifficulty: (mode: DifficultyMode) => void;
   selectTopObjective: (choice: TopObjectiveChoice) => void;
   selectExploreSubMission: (id: 'SPACE_TELESCOPE' | 'EARTH_OBSERVATION') => void;
@@ -165,6 +166,16 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
       exploreSubChoiceOpen: false,
       tutorialOpen: false,
       tutorialAcknowledged: false,
+    });
+  },
+
+  backToTitle: () => {
+    set({
+      phase: 'TITLE',
+      selectedObjective: null,
+      exploreSubChoiceOpen: false,
+      missionId: 'EARTH_OBSERVATION',
+      tutorialOpen: false,
     });
   },
 

@@ -70,6 +70,7 @@ export const PhaseHudOverlay: React.FC = () => {
   const debrief = useMissionStore((s) => s.debrief);
 
   const startSingleplayer = useMissionStore((s) => s.startSingleplayer);
+  const backToTitle = useMissionStore((s) => s.backToTitle);
   const setDifficulty = useMissionStore((s) => s.setDifficulty);
   const selectTopObjective = useMissionStore((s) => s.selectTopObjective);
   const selectExploreSubMission = useMissionStore((s) => s.selectExploreSubMission);
@@ -257,14 +258,24 @@ export const PhaseHudOverlay: React.FC = () => {
             </div>
           </div>
 
-          <button
-            type="button"
-            data-testid="enter-hangar-btn"
-            className="primary-cta-btn full-w"
-            onClick={requestEnterHangar}
-          >
-            ENTER VAB HANGAR
-          </button>
+          <div className="reticle-button-row">
+            <button
+              type="button"
+              data-testid="back-to-title-btn"
+              className="secondary-cta-btn"
+              onClick={backToTitle}
+            >
+              ← BACK
+            </button>
+            <button
+              type="button"
+              data-testid="enter-hangar-btn"
+              className="primary-cta-btn"
+              onClick={requestEnterHangar}
+            >
+              ENTER VAB HANGAR
+            </button>
+          </div>
         </div>
       </div>
     );
