@@ -575,6 +575,12 @@ export const PhaseHudOverlay: React.FC = () => {
     );
     const activeFuelKg =
       flight.activeStageIndex === 0 ? flight.stage1PropKg : flight.stage2PropKg;
+    const totalFuelKg = flight.stage1PropKg + flight.stage2PropKg;
+    const fuelPct = Math.round((totalFuelKg / Math.max(1, flight.stage1PropKg + flight.stage2PropKg)) * 100);
+
+    // Thermal color coding
+    const thermalColor = flight.thermalMarginC < 10 ? 'critical' : flight.thermalMarginC < 25 ? 'warn' : 'good';
+    const batteryColor = battPct < 20 ? 'critical' : battPct < 40 ? 'warn' : 'good';
 
     return (
       <div className="hud-layer pointer-pass" data-testid="flight-hud">
@@ -692,12 +698,25 @@ export const PhaseHudOverlay: React.FC = () => {
             </div>
             <div className="inst-pill">
               <span className="inst-k">FUEL</span>
-              <span className="inst-v">{Math.round(activeFuelKg)} kg</span>
+              <span className="inst-v">{Math.round(activeFuelKg)} kg ({fuelPct}%)</span>
             </div>
-            <div className="inst-pill">
+            <div className={`inst-pill ${batteryColor}`}>
               <span className="inst-k">BAT</span>
               <span className="inst-v">
                 {battPct}%{flight.inEclipse ? ' (ECLIPSE)' : ''}
+                {flight.currentPowerDrawW > 0 ? ` (${flight.currentPowerDrawW > flight.currentPowerGenW ? '-' : '+'}${Math.abs(flight.currentPowerGenW - flight.currentPowerDrawW)}W)` : ''}
+              </span>
+            </div>
+            <div className={`inst-pill ${thermalColor}`}>
+              <span className="inst-k">THERM</span>
+              <span className="inst-v">
+                {flight.thermalTempC.toFixed(0)}°C (M:{flight.thermalMarginC.toFixed(0)}°C)
+              </span>
+            </div>
+            <div className="inst-pill">
+              <span className="inst-k">BOIL</span>
+              <span className="inst-v">
+                {flight.propellantBoilOffKg.toFixed(2)} kg
               </span>
             </div>
             <div className="inst-pill">

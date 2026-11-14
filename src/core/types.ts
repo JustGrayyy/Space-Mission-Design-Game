@@ -318,6 +318,16 @@ export interface FlightEvent {
   message: string;
 }
 
+export interface AnomalyEvent {
+  timeSec: number;
+  type: 'RADIATION_SPIKE' | 'ATTITUDE_DISTURBANCE' | 'THERMAL_SOAK' | 'SOLAR_FLARE';
+  severity: 'MINOR' | 'MAJOR' | 'CRITICAL';
+  subsystemsAffected: SubsystemCategory[];
+  mitigated: boolean;
+  message: string;
+  recoveryTimeSec: number;
+}
+
 export interface FlightState {
   position: Vec3;
   velocity: Vec3;
@@ -353,6 +363,14 @@ export interface FlightState {
   peakDynamicPressurePa: number;
   enteredOrbitAtSec: number | null;
   reachedTargetAtSec: number | null;
+  // NEW: Live in-flight resource telemetry
+  propellantBoilOffKg: number;          // cumulative cryogenic boil-off
+  propellantBoilOffRateKgPerSec: number; // current boil-off rate
+  thermalTempC: number;                 // spacecraft internal temperature
+  thermalMarginC: number;               // margin to cold-soak limit
+  peakPowerDrawW: number;               // peak instantaneous power draw
+  anomaliesHandled: number;             // count of mid-flight anomalies mitigated
+  anomalyEvents: AnomalyEvent[];        // detailed anomaly log
 }
 
 export interface FlightControls {

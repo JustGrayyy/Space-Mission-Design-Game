@@ -62,7 +62,7 @@ export function generateDebrief(
       massStatus === 'OPTIMAL'
         ? 'Your rocket had enough muscle to lift off, climb into space, and finish the flight with spare fuel.'
         : 'Lighter spacecraft parts or a stronger rocket/heatshield would give you much safer flight margins.',
-    realisticMetrics: `Dry: ${craftVal.mass.spacecraftDryKg} kg | Wet: ${craftVal.mass.launchTotalMassKg} kg | TWR: ${coupled.padTwr.toFixed(2)} | Delta-v Expended: ${flightState.deltaVExpendedMs.toFixed(0)} m/s | Remaining: ${flightState.deltaVRemainingMs.toFixed(0)} m/s | Delta-v Margin: ${dvMargin.toFixed(0)} m/s | Lift Margin: ${coupled.payloadToLiftMarginKg.toFixed(0)} kg`,
+    realisticMetrics: `Dry: ${craftVal.mass.spacecraftDryKg} kg | Wet: ${craftVal.mass.launchTotalMassKg} kg | TWR: ${coupled.padTwr.toFixed(2)} | Delta-v Expended: ${flightState.deltaVExpendedMs.toFixed(0)} m/s | Remaining: ${flightState.deltaVRemainingMs.toFixed(0)} m/s | Delta-v Margin: ${dvMargin.toFixed(0)} m/s | Lift Margin: ${coupled.payloadToLiftMarginKg.toFixed(0)} kg | Boil-off: ${flightState.propellantBoilOffKg.toFixed(2)} kg`,
   };
 
   // 2. POWER (using coupled metrics: solar flux, dual power modes, thermal heaters)
@@ -80,19 +80,19 @@ export function generateDebrief(
     status: powerStatus,
     whatWentRight:
       powerStatus !== 'CRITICAL'
-        ? `Power bus stayed online through eclipses (lowest battery: ${flightState.minBatteryPct.toFixed(0)}%). Solar flux: ${solarPct}% of Earth.`
+        ? `Power bus stayed online through eclipses (lowest battery: ${flightState.minBatteryPct.toFixed(0)}%). Solar flux: ${solarPct}% of Earth. Thermal control: ${flightState.thermalTempC.toFixed(1)}°C (margin: ${flightState.thermalMarginC.toFixed(1)}°C).`
         : `Solar/RTG array peaked at ${coupled.sunlitGenerationW.toFixed(0)} W (${solarPct}% Earth flux).`,
     whatWentWrong:
       powerStatus === 'CRITICAL'
         ? flightState.failureReason ?? 'Battery ran dry during shadow crossing.'
         : powerStatus === 'WARNING'
-          ? `Battery dipped to ${flightState.minBatteryPct.toFixed(0)}% during shadow. Cruise margin: ${coupled.netCruiseW.toFixed(0)} W, Peak margin: ${coupled.netPeakW.toFixed(0)} W.`
-          : `Zero brownouts. Cruise margin: +${coupled.netCruiseW.toFixed(0)} W, Peak margin: +${coupled.netPeakW.toFixed(0)} W. Thermal heaters: sunlit ${coupled.sunlitSurvivalHeaterW.toFixed(0)} W, shadow ${coupled.shadowSurvivalHeaterW.toFixed(0)} W.`,
+          ? `Battery dipped to ${flightState.minBatteryPct.toFixed(0)}% during shadow. Cruise margin: ${coupled.netCruiseW.toFixed(0)} W, Peak margin: ${coupled.netPeakW.toFixed(0)} W. Thermal: ${flightState.thermalTempC.toFixed(1)}°C.`
+          : `Zero brownouts. Cruise margin: +${coupled.netCruiseW.toFixed(0)} W, Peak margin: +${coupled.netPeakW.toFixed(0)} W. Thermal heaters: sunlit ${coupled.sunlitSurvivalHeaterW.toFixed(0)} W, shadow ${coupled.shadowSurvivalHeaterW.toFixed(0)} W. Temp: ${flightState.thermalTempC.toFixed(1)}°C (margin: ${flightState.thermalMarginC.toFixed(1)}°C).`,
     beginnerNote:
       powerStatus === 'OPTIMAL'
         ? `Your solar panels/RTG and battery kept the lights on even on the dark side. Sunlight here is ${solarPct}% of Earth orbit.`
         : `In shadow, solar panels produce 0 W — bring a bigger battery or an RTG nuclear battery for dark/deep space. At ${solarPct}% solar flux, solar arrays need to be ${(100/solarPct).toFixed(0)}% larger than at Earth.`,
-    realisticMetrics: `Gen: ${coupled.sunlitGenerationW.toFixed(0)} W sunlit (${coupled.eclipseGenerationW.toFixed(0)} W eclipse) @ ${solarPct}% flux | Cruise: ${coupled.cruisePowerW.toFixed(0)} W (margin: ${coupled.netCruiseW.toFixed(0)} W) | Peak: ${coupled.peakPowerW.toFixed(0)} W (margin: ${coupled.netPeakW.toFixed(0)} W) | Sunlit heaters: ${coupled.sunlitSurvivalHeaterW.toFixed(0)} W | Shadow heaters: ${coupled.shadowSurvivalHeaterW.toFixed(0)} W | Min SoC: ${flightState.minBatteryPct.toFixed(1)}%`,
+    realisticMetrics: `Gen: ${coupled.sunlitGenerationW.toFixed(0)} W sunlit (${coupled.eclipseGenerationW.toFixed(0)} W eclipse) @ ${solarPct}% flux | Cruise: ${coupled.cruisePowerW.toFixed(0)} W (margin: ${coupled.netCruiseW.toFixed(0)} W) | Peak: ${coupled.peakPowerW.toFixed(0)} W (margin: ${coupled.netPeakW.toFixed(0)} W) | Peak Draw (flight): ${flightState.peakPowerDrawW.toFixed(0)} W | Sunlit heaters: ${coupled.sunlitSurvivalHeaterW.toFixed(0)} W | Shadow heaters: ${coupled.shadowSurvivalHeaterW.toFixed(0)} W | Min SoC: ${flightState.minBatteryPct.toFixed(1)}% | Temp: ${flightState.thermalTempC.toFixed(1)}°C | Margin: ${flightState.thermalMarginC.toFixed(1)}°C`,
   };
 
   // 3. BUDGET (using coupled metrics)
@@ -182,8 +182,8 @@ export function generateDebrief(
   const timeDebrief: ResourceDebrief = {
     status: timeStatus,
     whatWentRight: !overTime
-      ? `Built in ${coupled.buildMonths} months (limit ${mission.scheduleLimitMonths} mo); flight elapsed ${Math.round(flightState.elapsedFlightSec)}s.`
-      : `Flight simulation logged ${Math.round(flightState.elapsedFlightSec)}s telemetry.`,
+      ? `Built in ${coupled.buildMonths} months (limit ${mission.scheduleLimitMonths} mo); flight elapsed ${Math.round(flightState.elapsedFlightSec)}s. Anomalies handled: ${flightState.anomaliesHandled}.`
+      : `Flight simulation logged ${Math.round(flightState.elapsedFlightSec)}s telemetry. Anomalies handled: ${flightState.anomaliesHandled}.`,
     whatWentWrong: overTime
       ? `Exceeded launch window by ${coupled.buildMonths - mission.scheduleLimitMonths} months.`
       : outcome === 'FAILED'
@@ -193,7 +193,7 @@ export function generateDebrief(
       overTime
         ? 'Faster-to-build parts help you hit strict planetary launch windows.'
         : 'Great schedule management — integrated on time and reached operational phase smoothly.',
-    realisticMetrics: `Campaign Build: ${coupled.buildMonths}/${mission.scheduleLimitMonths} mo | Orbit: ${flightState.enteredOrbitAtSec ? `T+${Math.round(flightState.enteredOrbitAtSec)}s` : 'N/A'} | Target: ${flightState.reachedTargetAtSec ? `T+${Math.round(flightState.reachedTargetAtSec)}s` : 'N/A'}`,
+    realisticMetrics: `Campaign Build: ${coupled.buildMonths}/${mission.scheduleLimitMonths} mo | Orbit: ${flightState.enteredOrbitAtSec ? `T+${Math.round(flightState.enteredOrbitAtSec)}s` : 'N/A'} | Target: ${flightState.reachedTargetAtSec ? `T+${Math.round(flightState.reachedTargetAtSec)}s` : 'N/A'} | Anomalies: ${flightState.anomaliesHandled} handled | Boil-off: ${flightState.propellantBoilOffKg.toFixed(2)} kg | Peak Power: ${flightState.peakPowerDrawW.toFixed(0)} W | Min Temp: ${flightState.thermalTempC.toFixed(1)}°C`,
   };
 
   const headline =

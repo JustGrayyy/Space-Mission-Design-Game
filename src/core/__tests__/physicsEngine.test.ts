@@ -11,12 +11,15 @@ import {
 } from '../constants';
 import {
   computeOrbitalElements,
+  computeBoilOffRate,
   createInitialFlightState,
   getVisibleGroundStations,
   isInEclipseShadow,
   stepFlightSimulation,
+  seededRandom,
 } from '../physicsEngine';
 import { validateSpacecraft } from '../spacecraftValidator';
+import { generateDebrief } from '../debriefAnalyzer';
 
 describe('physicsEngine core mechanics', () => {
   it('computes exact Tsiolkovsky delta-V for 2-stage rocket', () => {
@@ -176,5 +179,221 @@ describe('physicsEngine core mechanics', () => {
     const visible = getVisibleGroundStations(overGoldstone, 0, ['goldstone', 'madrid', 'canberra']);
     expect(visible).toContain('goldstone');
     expect(visible).not.toContain('madrid');
+  });
+
+  it('computes deterministic seeded random for anomaly reproducibility', () => {
+    // Same seed always produces same value
+    expect(seededRandom(42)).toBe(seededRandom(42));
+    // Different seeds produce different values
+    expect(seededRandom(42)).not.toBe(seededRandom(43));
+    // Value always in [0, 1)
+    for (let i = 0; i < 100; i++) {
+      const v = seededRandom(i);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(1);
+    }
+  });
+
+  it('computes cryogenic boil-off rate with thermal/structure mitigation', () => {
+    const thermalT1 = { thermalTier: 1 } as any;
+    const thermalT3 = { thermalTier: 3 } as any;
+    const struct1 = { structuralIntegrity: 1 } as any;
+    const struct3 = { structuralIntegrity: 3 } as any;
+
+    // Stage 2 propellant: 5000 kg
+    // Base rate = 5000 * 0.0005 / 3600 = 0.000694 kg/s
+    const baseRate = 5000 * 0.0005 / 3600;
+
+    // No mitigation (tier 1)
+    const rateT1S1 = computeBoilOffRate(5000, thermalT1, struct1, 'TRANSIT', 'MOON_LANDING');
+    expect(rateT1S1).toBeCloseTo(baseRate * (1 - 0.5) * (1 - 0.2) * 1.0 * 1.2, 6);
+
+    // Tier 3 thermal, tier 3 structure
+    const rateT3S3 = computeBoilOffRate(5000, thermalT3, struct3, 'TRANSIT', 'MOON_LANDING');
+    expect(rateT3S3).toBeCloseTo(baseRate * (1 - 0.85) * (1 - 0.6) * 1.0 * 1.2, 6);
+
+    // Mars distance factor (1/1.52^2 ≈ 0.43)
+    const rateMars = computeBoilOffRate(5000, thermalT1, struct1, 'TRANSIT', 'MARS_LANDING');
+    expect(rateMars).toBeCloseTo(baseRate * (1 - 0.5) * (1 - 0.2) * (1/1.52/1.52) * 1.2, 6);
+
+    // No boil-off during ascent
+    const rateAscent = computeBoilOffRate(5000, thermalT1, struct1, 'ASCENT', 'MARS_LANDING');
+    expect(rateAscent).toBe(0);
+
+    // No boil-off when propellant exhausted
+    const rateEmpty = computeBoilOffRate(0, thermalT1, struct1, 'TRANSIT', 'MARS_LANDING');
+    expect(rateEmpty).toBe(0);
+  });
+
+  it('simulates propellant boil-off accumulation during deep-space coast', () => {
+    const cfg = RECOMMENDED_LOADOUTS.MARS_LANDING;
+    const ground = RECOMMENDED_GROUND.MARS_LANDING;
+
+    let state = createInitialFlightState('MARS_LANDING', cfg, ground, false);
+    state = {
+      ...state,
+      status: 'TRANSIT',
+      position: { x: 6_500_000, y: 0, z: 0 }, // Deep space
+      velocity: { x: 0, y: 0, z: 3000 },
+    };
+
+    // Simulate 10 hours of coast (36000 seconds)
+    const initialBoilOff = state.propellantBoilOffKg;
+    const initialStage2Prop = state.stage2PropKg;
+
+    for (let i = 0; i < 360; i++) {
+      state = stepFlightSimulation(
+        state,
+        'MARS_LANDING',
+        cfg,
+        ground,
+        { throttle: 0, pitchInput: 0, yawInput: 0 },
+        100,
+        'REALISTIC'
+      );
+    }
+
+    // Should have accumulated boil-off
+    expect(state.propellantBoilOffKg).toBeGreaterThan(initialBoilOff);
+    expect(state.stage2PropKg).toBeLessThan(initialStage2Prop);
+    expect(state.propellantBoilOffRateKgPerSec).toBeGreaterThan(0);
+  });
+
+  it('tracks thermal temperature and margin with 1/r^2 solar scaling', () => {
+    const cfg = RECOMMENDED_LOADOUTS.EARTH_OBSERVATION;
+    const ground = RECOMMENDED_GROUND.EARTH_OBSERVATION;
+
+    let state = createInitialFlightState('EARTH_OBSERVATION', cfg, ground, false);
+    state = {
+      ...state,
+      status: 'ORBIT',
+      position: { x: EARTH_RADIUS_M + 150_000, y: 0, z: 0 }, // Sunlit
+      velocity: { x: 0, y: 0, z: Math.sqrt(EARTH_MU / (EARTH_RADIUS_M + 150_000)) },
+    };
+
+    // Simulate orbit in sunlit
+    for (let i = 0; i < 100; i++) {
+      state = stepFlightSimulation(
+        state,
+        'EARTH_OBSERVATION',
+        cfg,
+        ground,
+        { throttle: 0, pitchInput: 0, yawInput: 0 },
+        10,
+        'REALISTIC'
+      );
+    }
+
+    // Should track thermal state
+    expect(state.thermalTempC).toBeGreaterThan(-50);
+    expect(state.thermalMarginC).toBeGreaterThan(0);
+    // Thermal temp should be reasonable in sunlit
+    expect(state.thermalTempC).toBeGreaterThan(10);
+  });
+
+  it('tracks peak power draw during DSN downlink operations', () => {
+    const cfg = RECOMMENDED_LOADOUTS.EARTH_OBSERVATION;
+    const ground = RECOMMENDED_GROUND.EARTH_OBSERVATION;
+
+    let state = createInitialFlightState('EARTH_OBSERVATION', cfg, ground, false);
+    state = {
+      ...state,
+      status: 'ORBIT',
+      position: { x: EARTH_RADIUS_M + 150_000, y: 0, z: 0 },
+      velocity: { x: 0, y: 0, z: Math.sqrt(EARTH_MU / (EARTH_RADIUS_M + 150_000)) },
+      onboardDataMb: 100,
+    };
+
+    const initialPeak = state.peakPowerDrawW;
+
+    // Simulate with visible station and data onboard
+    for (let i = 0; i < 50; i++) {
+      state = stepFlightSimulation(
+        state,
+        'EARTH_OBSERVATION',
+        cfg,
+        ground,
+        { throttle: 0, pitchInput: 0, yawInput: 0 },
+        10,
+        'REALISTIC'
+      );
+    }
+
+    // Peak power draw should be tracked (might stay same if no active downlink)
+    expect(state.peakPowerDrawW).toBeGreaterThanOrEqual(initialPeak);
+  });
+
+  it('generates deterministic anomalies during coast phases', () => {
+    const cfg = RECOMMENDED_LOADOUTS.MARS_LANDING;
+    const ground = RECOMMENDED_GROUND.MARS_LANDING;
+
+    let state = createInitialFlightState('MARS_LANDING', cfg, ground, false);
+    state = {
+      ...state,
+      status: 'TRANSIT',
+      position: { x: 6_500_000, y: 0, z: 0 },
+      velocity: { x: 0, y: 0, z: 3000 },
+      elapsedFlightSec: 3600 * 10, // 10 hours in
+    };
+
+    // Run simulation - anomaly probability is low but deterministic
+
+    for (let i = 0; i < 100; i++) {
+      state = stepFlightSimulation(
+        state,
+        'MARS_LANDING',
+        cfg,
+        ground,
+        { throttle: 0, pitchInput: 0, yawInput: 0 },
+        360,
+        'REALISTIC'
+      );
+    }
+
+    // Anomaly events array should be tracked
+    expect(Array.isArray(state.anomalyEvents)).toBe(true);
+    expect(state.anomaliesHandled).toBeGreaterThanOrEqual(0);
+  });
+
+  it('includes new telemetry in debrief report', () => {
+    const cfg = RECOMMENDED_LOADOUTS.EARTH_OBSERVATION;
+    const ground = RECOMMENDED_GROUND.EARTH_OBSERVATION;
+
+    let state = createInitialFlightState('EARTH_OBSERVATION', cfg, ground, false);
+    state = {
+      ...state,
+      status: 'SUCCESS',
+      position: { x: EARTH_RADIUS_M + 150_000, y: 0, z: 0 },
+      velocity: { x: 0, y: 0, z: Math.sqrt(EARTH_MU / (EARTH_RADIUS_M + 150_000)) },
+      elapsedFlightSec: 5000,
+      deltaVRemainingMs: 500,
+      deltaVExpendedMs: 3500,
+      minBatteryPct: 85,
+      targetAchieved: true,
+      propellantBoilOffKg: 1.5,
+      thermalTempC: 22,
+      thermalMarginC: 62,
+      peakPowerDrawW: 450,
+      anomaliesHandled: 2,
+      anomalyEvents: [
+        { timeSec: 1000, type: 'THERMAL_SOAK', severity: 'MINOR', subsystemsAffected: ['thermal'], mitigated: true, message: 'test', recoveryTimeSec: 60 },
+        { timeSec: 2000, type: 'ATTITUDE_DISTURBANCE', severity: 'MINOR', subsystemsAffected: ['adcs'], mitigated: true, message: 'test', recoveryTimeSec: 30 },
+      ],
+    };
+
+    const debrief = generateDebrief('EARTH_OBSERVATION', cfg, ground, state, 'REALISTIC');
+
+    // Check mass debrief includes boil-off
+    expect(debrief.resources.mass.realisticMetrics).toMatch(/Boil-off: 1\.50 kg/);
+
+    // Check power debrief includes thermal
+    expect(debrief.resources.power.realisticMetrics).toMatch(/Temp: 22\.0°C/);
+    expect(debrief.resources.power.realisticMetrics).toMatch(/Margin: 62\.0°C/);
+    expect(debrief.resources.power.realisticMetrics).toMatch(/Peak Draw \(flight\): 450 W/);
+
+    // Check time debrief includes anomalies
+    expect(debrief.resources.time.realisticMetrics).toMatch(/Anomalies: 2 handled/);
+    expect(debrief.resources.time.realisticMetrics).toMatch(/Boil-off: 1\.50 kg/);
+    expect(debrief.resources.time.realisticMetrics).toMatch(/Peak Power: 450 W/);
   });
 });

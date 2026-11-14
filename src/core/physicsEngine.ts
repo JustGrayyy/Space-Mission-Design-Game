@@ -28,6 +28,7 @@ import {
   SUN_DIRECTION,
 } from './constants';
 import type {
+  AnomalyEvent,
   DifficultyMode,
   FlightControls,
   FlightEvent,
@@ -80,6 +81,143 @@ export function vecNorm(a: Vec3): Vec3 {
 // Moon starts at ~115 deg and Mars at ~165 deg so first/second LEO orbit hits clean Hohmann window
 const MOON_PHASE_0 = 2.0;
 const MARS_PHASE_0 = 2.85;
+
+// --- Deterministic seeded anomaly system ---
+export function seededRandom(seed: number): number {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+// --- Cryogenic Boil-off Calculation ---
+export function computeBoilOffRate(
+  stage2PropKg: number,
+  thermal: SpacecraftPart | undefined,
+  structure: SpacecraftPart | undefined,
+  flightPhase: FlightStatus,
+  missionId: MissionId
+): number {
+  // Only applies to cryogenic upper stages during coast phases (TRANSIT, ORBIT, TARGET_CAPTURE)
+  const coastPhases = ['TRANSIT', 'ORBIT', 'TARGET_CAPTURE'];
+  if (!coastPhases.includes(flightPhase)) return 0;
+
+  // Only stage 2 propellant (upper stage) boils off during coast
+  const cryogenicPropKg = stage2PropKg;
+  if (cryogenicPropKg <= 0.01) return 0;
+
+  // Base boil-off rate: 0.05% per hour of remaining prop mass
+  const baseRatePerHour = 0.0005; // 0.05% per hour
+  const baseBoilOffKgPerSec = (cryogenicPropKg * baseRatePerHour) / 3600;
+
+  // Thermal tier mitigation: each tier reduces boil-off
+  const thermalTier = thermal?.thermalTier ?? 1;
+  const thermalMitigation = [0, 0.5, 0.7, 0.85, 0.95][Math.min(thermalTier, 4)];
+
+  // Structure tier mitigation: better insulation
+  const structIntegrity = structure?.structuralIntegrity ?? 0;
+  const structMitigation = [0, 0.2, 0.4, 0.6][Math.min(structIntegrity, 3)];
+
+  // Distance from Sun: farther = colder = less boil-off
+  // Mars ~1.52 AU, Earth/Moon ~1.0 AU
+  const solarDistanceAU = missionId === 'MARS_LANDING' ? 1.52 : 1.0;
+  const distanceFactor = 1 / (solarDistanceAU * solarDistanceAU); // 1/r^2
+
+  // Phase multiplier: deep space coast has no Earth shadow warming
+  let phaseFactor = 1.0;
+  if (missionId === 'MARS_LANDING' || missionId === 'MOON_LANDING') {
+    phaseFactor = 1.2; // Deep space coast is colder
+  }
+
+  const effectiveRate = baseBoilOffKgPerSec * (1 - thermalMitigation) * (1 - structMitigation) * distanceFactor * phaseFactor;
+  return Math.max(0, effectiveRate);
+}
+
+function generateAnomaly(
+  elapsedSec: number,
+  missionId: MissionId,
+  flightPhase: FlightStatus,
+  _parts: SpacecraftPart[],
+  thermal: SpacecraftPart | undefined,
+  adcs: SpacecraftPart | undefined,
+  computer: SpacecraftPart | undefined,
+  power: SpacecraftPart | undefined
+): AnomalyEvent | null {
+  // Only generate anomalies during coast phases (TRANSIT, ORBIT, TARGET_CAPTURE)
+  const coastPhases = ['TRANSIT', 'ORBIT', 'TARGET_CAPTURE'];
+  if (!coastPhases.includes(flightPhase)) return null;
+
+  // Base anomaly probability per hour (very low)
+  const baseProbPerHour = 0.02;
+  const hourOfMission = elapsedSec / 3600;
+  const seed = Math.floor(hourOfMission * 1000) + (missionId === 'MARS_LANDING' ? 10000 : 0) + (missionId === 'MOON_LANDING' ? 20000 : 0);
+  const rand = seededRandom(seed);
+
+  if (rand > baseProbPerHour) return null;
+
+  // Determine anomaly type based on mission and phase
+  const anomalyTypes: Array<AnomalyEvent['type']> = ['RADIATION_SPIKE', 'ATTITUDE_DISTURBANCE', 'THERMAL_SOAK'];
+  if (missionId === 'MARS_LANDING' || missionId === 'MOON_LANDING') {
+    anomalyTypes.push('SOLAR_FLARE');
+  }
+
+  const typeSeed = seededRandom(seed + 1);
+  const anomalyType = anomalyTypes[Math.floor(typeSeed * anomalyTypes.length)];
+
+  // Determine severity based on subsystem tiers
+  const thermalTier = thermal?.thermalTier ?? 1;
+  const adcsTier = adcs?.pointingTier ?? 1;
+  const computerRadHard = computer?.radHardened ?? false;
+  const powerIsRTG = power?.isSolar === false;
+
+  let severity: AnomalyEvent['severity'] = 'MINOR';
+  let mitigated = true;
+  let recoveryTimeSec = 60; // 1 minute default
+
+  if (anomalyType === 'RADIATION_SPIKE') {
+    if (!computerRadHard) {
+      severity = 'CRITICAL';
+      mitigated = false;
+      recoveryTimeSec = 0; // permanent
+    } else if (computer?.maxDataMbps ?? 0 < 60) {
+      severity = 'MAJOR';
+      mitigated = true;
+      recoveryTimeSec = 300; // 5 minutes
+    }
+  } else if (anomalyType === 'ATTITUDE_DISTURBANCE') {
+    if (adcsTier < 3) {
+      severity = 'MAJOR';
+      mitigated = true;
+      recoveryTimeSec = 180;
+    }
+  } else if (anomalyType === 'THERMAL_SOAK') {
+    if (thermalTier < 3) {
+      severity = 'MAJOR';
+      mitigated = true;
+      recoveryTimeSec = 240;
+    }
+  } else if (anomalyType === 'SOLAR_FLARE') {
+    if (!powerIsRTG && (power?.baseOutputW ?? 0) < 500) {
+      severity = 'CRITICAL';
+      mitigated = false;
+      recoveryTimeSec = 0;
+    } else {
+      severity = 'MINOR';
+      mitigated = true;
+      recoveryTimeSec = 120;
+    }
+  }
+
+  return {
+    timeSec: elapsedSec,
+    type: anomalyType,
+    severity,
+    subsystemsAffected: anomalyType === 'RADIATION_SPIKE' ? ['computer'] :
+                       anomalyType === 'ATTITUDE_DISTURBANCE' ? ['adcs'] :
+                       anomalyType === 'THERMAL_SOAK' ? ['thermal'] : ['power'],
+    mitigated,
+    message: `Anomaly detected: ${anomalyType.replace('_', ' ')} (${severity})${mitigated ? ' — auto-recovered' : ' — CRITICAL FAILURE'}`,
+    recoveryTimeSec: mitigated ? recoveryTimeSec : 0,
+  };
+}
 
 export function getMoonState(elapsedSec: number): { pos: Vec3; vel: Vec3 } {
   const angle = MOON_PHASE_0 + MOON_ANGULAR_RATE * elapsedSec;
@@ -364,6 +502,14 @@ export function createInitialFlightState(
     peakDynamicPressurePa: 0,
     enteredOrbitAtSec: null,
     reachedTargetAtSec: null,
+    // NEW: Live in-flight resource telemetry
+    propellantBoilOffKg: 0,
+    propellantBoilOffRateKgPerSec: 0,
+    thermalTempC: 20,
+    thermalMarginC: 50,
+    peakPowerDrawW: 0,
+    anomaliesHandled: 0,
+    anomalyEvents: [],
   };
 }
 
@@ -485,6 +631,16 @@ export function stepFlightSimulation(
   let lunarCaptureProgress = prevState.targetPhaseStatus.lunarCaptureProgress;
   let marsCaptureProgress = prevState.targetPhaseStatus.marsCaptureProgress;
   const events = [...prevState.events];
+
+  // NEW: Live in-flight telemetry tracking
+  let propellantBoilOffKg = prevState.propellantBoilOffKg;
+  let propellantBoilOffRateKgPerSec = 0;
+  let thermalTempC = prevState.thermalTempC;
+  let thermalMarginC = prevState.thermalMarginC;
+  let peakPowerDrawW = prevState.peakPowerDrawW;
+  let anomaliesHandled = prevState.anomaliesHandled;
+  let anomalyEvents: AnomalyEvent[] = [...prevState.anomalyEvents];
+  let lastAnomalyCheckHour = Math.floor(prevState.elapsedFlightSec / 3600);
 
   // Sub-step integration so even 500x time warp stays numerically accurate
   const maxSubStep = 0.25;
@@ -1074,6 +1230,65 @@ export function stepFlightSimulation(
     lastPowerGenW = powerGenW;
     lastPowerDrawW = currentPowerModeW;
 
+    // Track peak power draw for debrief
+    if (currentPowerModeW > peakPowerDrawW) {
+      peakPowerDrawW = currentPowerModeW;
+    }
+
+    // --- Cryogenic Propellant Boil-off during deep-space coast ---
+    const boilOffRateKgPerSec = computeBoilOffRate(
+      stage2PropKg,
+      thermal,
+      structure,
+      status,
+      missionId
+    );
+    propellantBoilOffRateKgPerSec = boilOffRateKgPerSec;
+    if (boilOffRateKgPerSec > 0) {
+      const boilOffThisStep = boilOffRateKgPerSec * h;
+      stage2PropKg = Math.max(0, stage2PropKg - boilOffThisStep);
+      propellantBoilOffKg += boilOffThisStep;
+    }
+
+    // --- Live Thermal Balance with 1/r^2 Solar Scaling ---
+    // Compute spacecraft temperature based on thermal balance
+    const heatInput = inEclipse
+      ? internalHeatW
+      : internalHeatW + absorbedSolarW;
+    const actualRejection = Math.min(heatInput, radiatorRejectionW);
+    const netHeat = heatInput - actualRejection;
+
+    // Temperature model: equilibrium temp where heat in = heat out (radiator)
+    // Simplified: temp rise proportional to net heat, clamped by heater capacity
+    // Base temp 20°C, each 100W net heat = ~5°C rise
+    if (netHeat > 0) {
+      thermalTempC = 20 + (netHeat / 100) * 5;
+    } else {
+      // Cold soak: temp drops, heaters engage up to capacity
+      const coldDelta = Math.abs(netHeat);
+      const heaterAvailable = inEclipse ? shadowSurvivalHeaterW : sunlitSurvivalHeaterW;
+      if (heaterAvailable > 0) {
+        // Heaters maintain temp, but if insufficient, temp drops
+        if (coldDelta > heaterAvailable) {
+          thermalTempC = Math.max(-40, 20 - ((coldDelta - heaterAvailable) / 100) * 10);
+        } else {
+          thermalTempC = 20; // Heaters maintain nominal
+        }
+      } else {
+        // No heaters - rapid cold soak
+        thermalTempC = Math.max(-40, 20 - (coldDelta / 100) * 10);
+      }
+    }
+    // Thermal margin: degrees to cold-soak failure (-40°C)
+    thermalMarginC = thermalTempC - (-40);
+
+    // Cold-soak failure check
+    if (thermalTempC <= -40) {
+      status = 'FAILED';
+      failureReason = `Spacecraft froze — thermal control insufficient! Temp: ${thermalTempC.toFixed(1)}°C`;
+      pushEvent(events, elapsed, 'CRITICAL', failureReason);
+    }
+
     if (batteryWh <= 0) {
       status = 'FAILED';
       failureReason = inEclipse
@@ -1122,6 +1337,45 @@ export function stepFlightSimulation(
       const dlMb = Math.min(onboardDataMb, (dlRateMbps * h) / 8);
       onboardDataMb -= dlMb;
       deliveredDataMb += dlMb;
+    }
+
+    // --- Peak Power Draw during DSN Downlink & ADCS Slew ---
+    // During active DSN contact with data onboard, peak load = cruise + payload + comms + ADCS slew
+    if (visibleStations.length > 0 && onboardDataMb > 0 && canCollectScience) {
+      const peakLoadW = peakPowerW; // cruise + payload + comms + ADCS slew
+      if (peakLoadW > peakPowerDrawW) {
+        peakPowerDrawW = peakLoadW;
+      }
+    }
+
+    // --- Deterministic Mid-Flight Anomaly Generation ---
+    const currentHour = Math.floor(elapsed / 3600);
+    if (currentHour > lastAnomalyCheckHour) {
+      lastAnomalyCheckHour = currentHour;
+      const anomaly = generateAnomaly(elapsed, missionId, status, parts, thermal, adcs, computer, powerPart);
+      if (anomaly) {
+        anomalyEvents.push(anomaly);
+        if (anomaly.mitigated) {
+          anomaliesHandled += 1;
+          pushEvent(events, elapsed, anomaly.severity === 'MINOR' ? 'INFO' : 'WARN', anomaly.message);
+          // Apply anomaly effects
+          if (anomaly.type === 'RADIATION_SPIKE' && anomaly.severity === 'MAJOR') {
+            // Computer safe mode: temporarily reduced data rate
+          } else if (anomaly.type === 'ATTITUDE_DISTURBANCE') {
+            // Pointing loss: temporarily can't collect science
+          } else if (anomaly.type === 'THERMAL_SOAK') {
+            // Thermal disturbance: extra heater draw during recovery
+            thermalMarginC = Math.max(0, thermalMarginC - 20);
+          } else if (anomaly.type === 'SOLAR_FLARE') {
+            // Power surge: temporary generation reduction
+          }
+        } else {
+          // Critical unmitigated anomaly = mission failure
+          status = 'FAILED';
+          failureReason = anomaly.message;
+          pushEvent(events, elapsed, 'CRITICAL', failureReason);
+        }
+      }
     }
 
     observationProgress = Math.min(1, deliveredDataMb / mission.targetScienceMb);
@@ -1192,5 +1446,13 @@ export function stepFlightSimulation(
     enteredOrbitAtSec,
     reachedTargetAtSec,
     timeWarp: timeWarp,
+    // NEW: Live in-flight telemetry
+    propellantBoilOffKg,
+    propellantBoilOffRateKgPerSec,
+    thermalTempC,
+    thermalMarginC,
+    peakPowerDrawW,
+    anomaliesHandled,
+    anomalyEvents,
   };
 }
