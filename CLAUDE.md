@@ -18,23 +18,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | **Spacecraft Validator** | `src/core/spacecraftValidator.ts` | 30+ conflict checks: mass/Δv, power/battery, computer bus/rad-hard, ADCS pointing tier, thermal/heatshield, payload match, TWR, budget, schedule, Tier 4 parts |
 | **Ground Segment** | `src/core/groundSegment.ts` | Contact coverage calculation, downlink vs. science generation, buffer overflow risk, total campaign cost/schedule |
 | **Debrief Analyzer** | `src/core/debriefAnalyzer.ts` | Post-flight resource-by-resource assessment (mass, power, budget, data, comms, time) with beginner/realistic notes |
+| **Robot Assistant** | `src/core/robotAssistant.ts` | Deterministic AI for failure analysis; appears only on DEBRIEF for failed missions; analyzes root cause and suggests specific fixes |
 | **State Store** | `src/store/useMissionStore.ts` | Zustand store managing all game phases, spacecraft config, ground config, flight state, flight controls, debrief |
 | **3D Scenes** | `src/three/scenes/` | `SceneController` interface + 4 implementations: `SolarSelectScene` (title/objective select), `HangarScene` (VAB), `GroundGlobeScene` (DSN config), `FlightScene` (real-time flight) |
 | **Procedural Assets** | `src/three/meshes/ProceduralAssets.ts` | Geometry generators for rockets, planets, exhaust plumes, particle systems, cones, orbit lines, starfields |
-| **HUD Components** | `src/hud/` | `PhaseHudOverlay.tsx` (5 phase UIs), `TopResourceStrip.tsx`, `KapCommsBubble.tsx` |
+| **HUD Components** | `src/hud/` | `PhaseHudOverlay.tsx` (5 phase UIs), `TopResourceStrip.tsx`, `KapCommsBubble.tsx` (top-left AI assistant), `RobotAssistant.tsx` (failure analysis), `TutorialOverlay.tsx` |
 
 ### Game Phase Flow
 
 ```
 TITLE → OBJECTIVE_SELECT → HANGAR → GROUND_SEGMENT → FLIGHT → DEBRIEF
-                              ↑_______________________| (restart or return)
+          ↑ (back button)      ↑_______________________| (restart or return)
 ```
 
-- **OBJECTIVE_SELECT**: Choose Moon Landing, Mars Landing, or Explore Space (→ Earth Obs or Space Telescope)
+- **TITLE**: Difficulty selection (BEGINNER/REALISTIC), start singleplayer
+- **OBJECTIVE_SELECT**: Choose Moon Landing, Mars Landing, or Explore Space (→ Earth Obs or Space Telescope); back button returns to TITLE
 - **HANGAR**: Drag-drop 7 subsystem slots + launcher; Kap auto-engineer applies recommended loadout; validation runs live
 - **GROUND_SEGMENT**: Toggle 6 DSN stations, pick comms band (S/X/Ka-Band), set ops lifetime (1/3/5 yr); greenlight requires zero CRITICAL conflicts
 - **FLIGHT**: Real-time 3D sim with autopilot (BEGINNER) or manual (REALISTIC); throttle, staging, time warp 1–500x; chase camera
-- **DEBRIEF**: 6-resource scorecard with OPTIMAL/WARNING/CRITICAL status, beginner tips, realistic telemetry
+- **DEBRIEF**: 6-resource scorecard with OPTIMAL/WARNING/CRITICAL status, beginner tips, realistic telemetry; Robot Assistant analyzes failures
+
+### AI Assistants
+
+**KapComms Bubble (Top-Left)** — Active in all phases except TITLE
+- Provides real-time guidance during spacecraft building (HANGAR)
+- Displays validation conflicts and engineering tips
+- Shows flight telemetry and warnings during FLIGHT phase
+- Mood-based visual feedback: HAPPY (green), CONCERNED (orange), ALERT (red)
+
+**Robot Assistant (Bottom-Right)** — Appears ONLY on failed missions during DEBRIEF
+- Deterministic rule-based AI (no API tokens)
+- Root cause analysis of mission failures
+- Specific fix recommendations (e.g., "Install BIGGER BATTERY or add RTG")
+- 4 robot moods: Happy, Thinking, Love, Bulb (stored in `public/Robot/`)
+- Priority levels: CRITICAL (red), HIGH (orange), MEDIUM (blue), LOW (green)
 
 ## Commands
 
@@ -78,7 +95,8 @@ npx vitest run -t "maintains circular orbit stability"
   power: { sunlitGenerationW, totalDrawW, batteryWh, requiredEclipseWh, ... },
   data: { payloadDataRateMbps, cpuMaxMbps, storageMaxMb },
   budget: { craftCostM, launcherCostM, totalCraftAndLauncherM },
-  schedule: { buildMonths }
+  schedule: { buildMonths },
+  coupledMetrics: { ... }  // NEW: Live resource calculations with margins
 }
 ```
 
@@ -91,7 +109,8 @@ npx vitest run -t "maintains circular orbit stability"
   observationProgress, targetAchieved, elapsedFlightSec, timeWarp,
   flightAssistEnabled, status, failureReason, inEclipse,
   activeDsnStationIds, currentPowerGenW, currentPowerDrawW,
-  deltaVRemainingMs, deltaVExpendedMs, orbitalElements, targetPhaseStatus, events[]
+  deltaVRemainingMs, deltaVExpendedMs, orbitalElements, targetPhaseStatus, events[],
+  propellantBoilOffKg, thermalTempC, thermalMarginC, minBatteryPct, peakPowerDrawW  // NEW: Thermal & boil-off tracking
 }
 ```
 
@@ -158,13 +177,20 @@ PRELAUNCH → ASCENT → ORBIT → [TRANSIT → TARGET_CAPTURE → LANDING] → 
 1. Add entry to `SPACECRAFT_PARTS` in `constants.ts` with all required fields
 2. Update `RECOMMENDED_LOADOUTS` if it belongs in a default mission
 3. Add validation logic in `spacecraftValidator.ts` if it introduces new conflict types
-4. Add mesh generation in `ProceduralAssets.ts` if visual distinct
+4. Add mesh generation in `ProceduralAssets.ts` if visually distinct
 
 ### Adding a New Mission
 1. Add `MissionSpec` to `MISSIONS` in `constants.ts`
 2. Add `RECOMMENDED_LOADOUTS` and `RECOMMENDED_GROUND` entries
 3. Add target type handling in `physicsEngine.ts` (flight phase logic, science collection conditions)
 4. Add debrief metrics in `debriefAnalyzer.ts`
+5. Add mission guidance to `MISSION_GUIDES` in `TutorialOverlay.tsx`
+
+### Adding Robot Assistant Hints
+1. Identify failure pattern in `generateDebriefAnalysis()` (`robotAssistant.ts`)
+2. Parse `flightState.failureReason` for specific error strings
+3. Map to specific fix recommendations (part upgrades, configuration changes)
+4. Set appropriate `RobotMood` (happy/thinking/love/bulb) and priority level
 
 ### Hot Module Replacement Notes
 - Zustand store persists via `window.__MISSION_STORE__` reference
@@ -185,3 +211,10 @@ PRELAUNCH → ASCENT → ORBIT → [TRANSIT → TARGET_CAPTURE → LANDING] → 
 - React components: `PascalCase.tsx` (e.g., `PhaseHudOverlay.tsx`)
 - Three.js scenes: `PascalCase.ts` + `Scene` suffix (e.g., `FlightScene.ts`)
 - Tests: `*.test.ts` alongside source or in `__tests__` folder
+
+## Important Notes
+
+- **Smart Quotes**: Avoid curly quotes (`'` `'`) in JSX/TSX files; use ASCII quotes (`'`) to prevent TypeScript errors
+- **Robot Images**: Located in `public/Robot/` (Robot-Happy.png, Robot-Thinking.png, Robot-Love.png, Robot-Bulb.png)
+- **Tutorial Content**: Keep concise (~60 words per section max); players prefer scannable bullet points over paragraphs
+- **Back Navigation**: All phases support back button except FLIGHT (abort returns to debrief)
