@@ -33,16 +33,36 @@ export class HangarScene implements SceneController {
 
     this.scene.add(this.root);
 
-    // Hangar lighting
-    const ambient = new THREE.AmbientLight('#6b8ab8', 0.9);
-    const keyLight = new THREE.SpotLight('#fff3db', 160, 60, Math.PI / 4, 0.4, 1.2);
-    keyLight.position.set(10, 17, 11);
-    const fillLight = new THREE.DirectionalLight('#38bdf8', 1.15);
-    fillLight.position.set(-12, 8, -8);
-    const floorBounce = new THREE.PointLight('#f59e0b', 18, 22);
-    floorBounce.position.set(0, 1.2, 2.5);
+    // Enhanced Hangar PBR lighting - crisp key, cool fill, warm floor bounce
+    const ambient = new THREE.AmbientLight('#5a7db8', 0.6);
 
-    this.root.add(ambient, keyLight, fillLight, floorBounce);
+    // Key light - warm sunlight from high angle
+    const keyLight = new THREE.DirectionalLight('#fff5e6', 3.2);
+    keyLight.position.set(15, 25, 10);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.camera.near = 1;
+    keyLight.shadow.camera.far = 80;
+    keyLight.shadow.camera.left = -20;
+    keyLight.shadow.camera.right = 20;
+    keyLight.shadow.camera.top = 20;
+    keyLight.shadow.camera.bottom = -20;
+    keyLight.shadow.bias = -0.0005;
+
+    // Fill light - cool cyan from opposite side
+    const fillLight = new THREE.DirectionalLight('#38bdf8', 1.0);
+    fillLight.position.set(-12, 10, -8);
+
+    // Rim/back light - subtle warm rim for silhouette
+    const rimLight = new THREE.DirectionalLight('#fef08a', 0.6);
+    rimLight.position.set(-5, -5, -15);
+
+    // Floor bounce - warm ambient from pad
+    const floorBounce = new THREE.PointLight('#f59e0b', 25, 30);
+    floorBounce.position.set(0, 1.5, 3);
+    floorBounce.decay = 1.5;
+
+    this.root.add(ambient, keyLight, fillLight, rimLight, floorBounce);
     this.root.add(createVabHangarGroup());
     this.root.add(this.stackContainer);
 

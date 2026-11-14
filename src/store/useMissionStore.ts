@@ -372,8 +372,10 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
           : flightControls,
       });
     } else {
+      // Apply suggested time warp from physics engine (for auto step-down during landing)
+      const newTimeWarp = nextFlight.timeWarp ?? state.flight.timeWarp;
       set({
-        flight: nextFlight,
+        flight: { ...nextFlight, timeWarp: newTimeWarp },
         flightControls: consumedStage
           ? { ...flightControls, stageRequested: false }
           : flightControls,

@@ -495,6 +495,25 @@ export function stepFlightSimulation(
   let lastPowerGenW = prevState.currentPowerGenW;
   let lastPowerDrawW = prevState.currentPowerDrawW;
 
+  // Compute time warp step-down for landing missions (once per frame, not per sub-step)
+  let timeWarp = prevState.timeWarp;
+  if (missionId === 'MOON_LANDING' || missionId === 'MARS_LANDING') {
+    const isMoon = missionId === 'MOON_LANDING';
+    const moon = getMoonState(0);
+    const mars = getMarsState(0);
+    const relPos = isMoon ? vecSub({ x: EARTH_RADIUS_M, y: 0, z: 0 }, moon.pos) : vecSub({ x: EARTH_RADIUS_M, y: 0, z: 0 }, mars.pos);
+    const targetRadius = isMoon ? MOON_RADIUS_M : MARS_RADIUS_M;
+    const targetAlt = vecLen(relPos) - targetRadius;
+
+    if (targetAlt < 15_000 && prevState.timeWarp > 1) {
+      timeWarp = 1;
+    } else if (targetAlt < 100_000 && prevState.timeWarp > 10) {
+      timeWarp = Math.min(prevState.timeWarp, 10);
+    } else if (targetAlt < 500_000 && prevState.timeWarp > 50) {
+      timeWarp = Math.min(prevState.timeWarp, 50);
+    }
+  }
+
   for (let i = 0; i < steps; i++) {
     if (status === 'SUCCESS' || status === 'FAILED') break;
 
@@ -698,12 +717,18 @@ export function stepFlightSimulation(
         const relOrb = computeOrbitalElements(relPos, relVel, targetMu, targetRadius, 0);
         const startLandingAlt = isMoon ? 32_000 : 12_000;
 
+        // Stronger capture burn when first entering SOI with high periapsis
+        const isCaptureBurn = (status === 'TARGET_CAPTURE' && relOrb.periapsisAltM > (isMoon ? 20_000 : 15_000));
+
         if (targetAlt > startLandingAlt) {
           // Coast cleanly down to suicide-burn corridor; tiny nudge only if periapsis misses target
-          if (relOrb.periapsisAltM > (isMoon ? 55_000 : 28_000)) {
-            const desiredInward = vecNorm(vecSub(vecScale(relUp, -260), relVel));
-            heading = desiredInward;
-            throttle = 0.12;
+          if (relOrb.periapsisAltM > (isMoon ? 55_000 : 28_000) || isCaptureBurn) {
+            // Capture burn: retrograde relative to target body
+            const retrogradeDir = relSpeed > 1 ? vecNorm(vecScale(relVel, -1)) : relUp;
+            // Fallback to radial-in if speed near zero
+            const captureDir = relSpeed > 1 ? retrogradeDir : vecScale(relUp, -1);
+            heading = captureDir;
+            throttle = isCaptureBurn ? 0.8 : 0.12;
           } else {
             heading = relSpeed > 5 ? vecNorm(vecScale(relVel, -1)) : relUp;
             throttle = 0;
@@ -721,7 +746,9 @@ export function stepFlightSimulation(
             4,
             Math.sqrt(2 * maxDecel * 0.52 * Math.max(targetAlt - 120, 0))
           );
-          heading = relSpeed > 2 ? vecNorm(vecScale(relVel, -1)) : relUp;
+          // Use retrograde direction, fallback to radial-up if speed too low
+          const retrogradeDir = relSpeed > 1 ? vecNorm(vecScale(relVel, -1)) : relUp;
+          heading = retrogradeDir;
 
           if (relSpeed > safeSpeed) {
             throttle = Math.min(1, 0.35 + (relSpeed - safeSpeed) / 30);
@@ -1082,5 +1109,6 @@ export function stepFlightSimulation(
     peakDynamicPressurePa,
     enteredOrbitAtSec,
     reachedTargetAtSec,
+    timeWarp: timeWarp,
   };
 }

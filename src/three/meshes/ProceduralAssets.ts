@@ -1,6 +1,97 @@
 import * as THREE from 'three';
 import type { SpacecraftConfig, SubsystemCategory } from '../../core/types';
 
+// --- PBR Material Helpers ---
+
+function makeMetalFoilMaterial(baseColor: string, emissiveColor?: string, emissiveIntensity = 0): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: baseColor,
+    metalness: 0.85,
+    roughness: 0.15,
+    clearcoat: 0.3,
+    clearcoatRoughness: 0.2,
+    emissive: emissiveColor ? new THREE.Color(emissiveColor) : undefined,
+    emissiveIntensity,
+    reflectivity: 1.0,
+  });
+}
+
+function makeCarbonCompositeMaterial(baseColor: string): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: baseColor,
+    metalness: 0.1,
+    roughness: 0.85,
+  });
+}
+
+function makeSolarCellMaterial(): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#0a1628',
+    metalness: 0.95,
+    roughness: 0.02,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05,
+    emissive: new THREE.Color('#1e3a5f'),
+    emissiveIntensity: 0.15,
+    transmission: 0.05,
+    thickness: 0.3,
+  });
+}
+
+function makeThrusterBellMaterial(isVacuumOptimized = false): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: isVacuumOptimized ? '#1a1a2e' : '#2d2d3a',
+    metalness: 0.9,
+    roughness: isVacuumOptimized ? 0.15 : 0.25,
+    emissive: isVacuumOptimized ? new THREE.Color('#0f0f1a') : new THREE.Color('#1a1008'),
+    emissiveIntensity: isVacuumOptimized ? 0.1 : 0.05,
+  });
+}
+
+function makeMLIMaterial(): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#c9a84c',
+    metalness: 0.95,
+    roughness: 0.08,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.1,
+    emissive: new THREE.Color('#8b6f1a'),
+    emissiveIntensity: 0.08,
+  });
+}
+
+function makeWhiteThermalMaterial(): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#e8eef4',
+    metalness: 0.05,
+    roughness: 0.92,
+    clearcoat: 0.2,
+    clearcoatRoughness: 0.3,
+  });
+}
+
+function makeTitaniumMaterial(): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#a8b0ba',
+    metalness: 0.75,
+    roughness: 0.35,
+    clearcoat: 0.4,
+    clearcoatRoughness: 0.2,
+  });
+}
+
+function makeGoldKaptonMaterial(): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#d4a82e',
+    metalness: 0.9,
+    roughness: 0.12,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.15,
+    emissive: new THREE.Color('#8b6f1a'),
+    emissiveIntensity: 0.1,
+  });
+}
+
 export function disposeObject3D(root: THREE.Object3D): void {
   root.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
@@ -11,15 +102,38 @@ export function disposeObject3D(root: THREE.Object3D): void {
     if (mat) {
       const mats = Array.isArray(mat) ? mat : [mat];
       for (const m of mats) {
-        const std = m as THREE.MeshStandardMaterial;
-        std.map?.dispose();
-        std.emissiveMap?.dispose();
-        std.bumpMap?.dispose();
+        if (m instanceof THREE.Material) {
+          // Common maps
+          (m as THREE.MeshStandardMaterial).map?.dispose();
+          (m as THREE.MeshStandardMaterial).emissiveMap?.dispose();
+          (m as THREE.MeshStandardMaterial).bumpMap?.dispose();
+          (m as THREE.MeshStandardMaterial).normalMap?.dispose();
+          (m as THREE.MeshStandardMaterial).roughnessMap?.dispose();
+          (m as THREE.MeshStandardMaterial).metalnessMap?.dispose();
+          (m as THREE.MeshStandardMaterial).displacementMap?.dispose();
+          // Physical material maps
+          (m as THREE.MeshPhysicalMaterial).clearcoatMap?.dispose();
+          (m as THREE.MeshPhysicalMaterial).clearcoatRoughnessMap?.dispose();
+          (m as THREE.MeshPhysicalMaterial).transmissionMap?.dispose();
+          (m as THREE.MeshPhysicalMaterial).thicknessMap?.dispose();
+        }
         m.dispose();
       }
     }
   });
 }
+
+// Export material creators for use in other files
+export {
+  makeMetalFoilMaterial,
+  makeCarbonCompositeMaterial,
+  makeSolarCellMaterial,
+  makeThrusterBellMaterial,
+  makeMLIMaterial,
+  makeWhiteThermalMaterial,
+  makeTitaniumMaterial,
+  makeGoldKaptonMaterial,
+};
 
 export function createStarfield(count = 1600, radius = 3200): THREE.Points {
   const positions = new Float32Array(count * 3);
@@ -207,54 +321,97 @@ export function createPlanetMesh(
   group.name = `planet-${kind.toLowerCase()}`;
 
   const tex = makePlanetCanvasTexture(kind);
-  const segs = 40;
+  const segs = 48;
   const geom = new THREE.SphereGeometry(radiusUnits, segs, segs);
-  const mat = new THREE.MeshStandardMaterial({
-    map: tex,
-    roughness: kind === 'EARTH' ? 0.65 : 0.9,
-    metalness: 0.05,
-  });
 
-  const body = new THREE.Mesh(geom, mat);
+  // PBR materials for planets
+  let bodyMat: THREE.MeshStandardMaterial;
+  if (kind === 'EARTH') {
+    bodyMat = new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.65,
+      metalness: 0.05,
+      envMapIntensity: 1.0,
+    });
+  } else if (kind === 'MOON') {
+    bodyMat = new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.95,
+      metalness: 0.02,
+    });
+  } else {
+    bodyMat = new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.88,
+      metalness: 0.03,
+    });
+  }
+
+  const body = new THREE.Mesh(geom, bodyMat);
   body.name = `${kind.toLowerCase()}-surface`;
   group.add(body);
 
   if (kind === 'EARTH' || kind === 'MARS') {
-    // Atmospheric Fresnel rim glow
-    const rimGeom = new THREE.SphereGeometry(radiusUnits * 1.045, segs, segs);
-    const rimColor =
-      kind === 'EARTH' ? new THREE.Color('#3ca8ff') : new THREE.Color('#ff8c5a');
+    // Enhanced Atmospheric Fresnel Rim Glow - uses BackSide for proper limb glow
+    const rimGeom = new THREE.SphereGeometry(radiusUnits * 1.035, segs, segs);
+
     const rimMat = new THREE.ShaderMaterial({
       uniforms: {
-        glowColor: { value: rimColor },
+        uInnerColor: { value: new THREE.Color(kind === 'EARTH' ? '#3ca8ff' : '#ff8c5a') },
+        uOuterColor: { value: new THREE.Color(kind === 'EARTH' ? '#0ea5e9' : '#fb923c') },
+        uFresnelPower: { value: 3.2 },
+        uFresnelScale: { value: 1.0 },
+        uTime: { value: 0 },
+        uCameraPos: { value: new THREE.Vector3() },
       },
       vertexShader: `
         varying vec3 vNormal;
-        varying vec3 vViewPosition;
+        varying vec3 vWorldPos;
         void main() {
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           vNormal = normalize(normalMatrix * normal);
-          vViewPosition = -mvPosition.xyz;
-          gl_Position = projectionMatrix * mvPosition;
+          vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
-        uniform vec3 glowColor;
+        uniform vec3 uInnerColor;
+        uniform vec3 uOuterColor;
+        uniform float uFresnelPower;
+        uniform float uFresnelScale;
+        uniform float uTime;
+        uniform vec3 uCameraPos;
         varying vec3 vNormal;
-        varying vec3 vViewPosition;
+        varying vec3 vWorldPos;
+
         void main() {
-          vec3 viewDir = normalize(vViewPosition);
-          float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 2.8);
-          gl_FragColor = vec4(glowColor, fresnel * 0.72);
+          vec3 viewDir = normalize(uCameraPos - vWorldPos);
+          float NdotV = max(dot(vNormal, viewDir), 0.0);
+          float fresnel = pow(1.0 - NdotV, uFresnelPower) * uFresnelScale;
+
+          // Add subtle atmospheric shimmer
+          float shimmer = sin(vWorldPos.y * 2.0 + uTime * 0.8) * 0.02 + 0.98;
+
+          // Color gradient from inner to outer atmosphere
+          float gradient = smoothstep(0.15, 0.85, fresnel);
+          vec3 color = mix(uInnerColor, uOuterColor, gradient);
+
+          float alpha = fresnel * shimmer * 0.85;
+          gl_FragColor = vec4(color, alpha);
         }
       `,
       transparent: true,
       blending: THREE.AdditiveBlending,
-      side: THREE.FrontSide,
+      side: THREE.BackSide,
       depthWrite: false,
+      depthTest: true,
     });
+
     const rim = new THREE.Mesh(rimGeom, rimMat);
     rim.name = `${kind.toLowerCase()}-atmosphere`;
+    rim.userData.updateUniforms = (camera: THREE.Camera, time: number) => {
+      rimMat.uniforms.uCameraPos.value.setFromMatrixPosition(camera.matrixWorld);
+      rimMat.uniforms.uTime.value = time;
+    };
     group.add(rim);
   }
 
@@ -1279,4 +1436,285 @@ export function createConeBeam(
     depthWrite: false,
   });
   return new THREE.Mesh(geom, mat);
+}
+
+// --- Particle System for Exhaust Plumes ---
+
+interface ParticleSystem {
+  points: THREE.Points;
+  geometry: THREE.BufferGeometry;
+  material: THREE.PointsMaterial;
+  particles: {
+    positions: Float32Array;
+    sizes: Float32Array;
+    colors: Float32Array;
+    alphas: Float32Array;
+    velocities: Float32Array;
+    lifetimes: Float32Array;
+    ages: Float32Array;
+  };
+  maxParticles: number;
+  activeCount: number;
+  update: (dt: number, throttle: number, inVacuum: boolean, stageType: 'kerolox' | 'hydrolox' | 'methalox' | 'ion') => void;
+  dispose: () => void;
+}
+
+function createParticleTexture(): THREE.DataTexture {
+  const size = 64;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (x - size / 2) / (size / 2);
+      const dy = (y - size / 2) / (size / 2);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const alpha = dist < 1.0 ? Math.pow(1.0 - dist, 2.5) : 0;
+      const idx = (y * size + x) * 4;
+      data[idx] = 255;
+      data[idx + 1] = 255;
+      data[idx + 2] = 255;
+      data[idx + 3] = Math.round(alpha * 255);
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+const particleTexture = createParticleTexture();
+
+export function createParticleSystem(
+  maxParticles: number = 800,
+  isMainEngine: boolean = true
+): ParticleSystem {
+  const geometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(maxParticles * 3);
+  const sizes = new Float32Array(maxParticles);
+  const colors = new Float32Array(maxParticles * 3);
+  const alphas = new Float32Array(maxParticles);
+  const velocities = new Float32Array(maxParticles * 3);
+  const lifetimes = new Float32Array(maxParticles);
+  const ages = new Float32Array(maxParticles);
+
+  // Initialize all particles as dead
+  for (let i = 0; i < maxParticles; i++) {
+    lifetimes[i] = 0;
+    ages[i] = 0;
+    alphas[i] = 0;
+    sizes[i] = 0;
+  }
+
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+
+  // Stage-specific color palettes
+  const keroloxColors = [
+    new THREE.Color('#ff6b1a'),  // Hot amber
+    new THREE.Color('#ff9500'),  // Orange
+    new THREE.Color('#ffaa33'),  // Light orange
+    new THREE.Color('#ffcc66'),  // Yellow-orange
+    new THREE.Color('#ffdd99'),  // Pale yellow
+  ];
+  const hydroloxColors = [
+    new THREE.Color('#88ccff'),  // Cyan-blue
+    new THREE.Color('#aaddff'),  // Light cyan
+    new THREE.Color('#ccffff'),  // Pale cyan
+    new THREE.Color('#ffffff'),  // White hot core
+    new THREE.Color('#eef8ff'),  // Very pale blue
+  ];
+  const methaloxColors = [
+    new THREE.Color('#ff5500'),  // Deep orange
+    new THREE.Color('#ff8822'),  // Orange
+    new THREE.Color('#ffaa44'),  // Light orange
+    new THREE.Color('#ffcc77'),  // Yellow-orange
+    new THREE.Color('#ffeedd'),  // Pale cream
+  ];
+  const ionColors = [
+    new THREE.Color('#bb88ff'),  // Violet
+    new THREE.Color('#ccaaaa'),  // Light violet
+    new THREE.Color('#ddccff'),  // Pale violet
+    new THREE.Color('#eeeeff'),  // Almost white
+    new THREE.Color('#ffffff'),  // White core
+  ];
+
+  const material = new THREE.PointsMaterial({
+    size: 1.0,
+    vertexColors: true,
+    transparent: true,
+    opacity: 1.0,
+    sizeAttenuation: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    map: particleTexture,
+    alphaMap: particleTexture,
+    alphaTest: 0.001,
+  });
+
+  const points = new THREE.Points(geometry, material);
+  points.frustumCulled = false;
+
+  const system: ParticleSystem = {
+    points,
+    geometry,
+    material,
+    particles: { positions, sizes, colors, alphas, velocities, lifetimes, ages },
+    maxParticles,
+    activeCount: 0,
+    update: (dt: number, throttle: number, inVacuum: boolean, stageType: 'kerolox' | 'hydrolox' | 'methalox' | 'ion') => {
+      if (throttle <= 0.01) {
+        // Fade out existing particles
+        for (let i = 0; i < system.activeCount; i++) {
+          ages[i] += dt;
+          const lifeRatio = ages[i] / lifetimes[i];
+          if (lifeRatio >= 1.0) {
+            alphas[i] = 0;
+            continue;
+          }
+          alphas[i] = Math.max(0, (1.0 - lifeRatio) * alphas[i]);
+
+          // Continue physics
+          positions[i * 3] += velocities[i * 3] * dt;
+          positions[i * 3 + 1] += velocities[i * 3 + 1] * dt;
+          positions[i * 3 + 2] += velocities[i * 3 + 2] * dt;
+
+          // Gravity falloff for pad smoke
+          if (!isMainEngine) {
+            velocities[i * 3 + 1] -= 0.5 * dt; // gentle settling
+          }
+        }
+        geometry.attributes.position.needsUpdate = true;
+        geometry.attributes.alpha.needsUpdate = true;
+        geometry.attributes.size.needsUpdate = true;
+        return;
+      }
+
+      // Select color palette
+      let palette: THREE.Color[];
+      let baseSpeed: number;
+      let spread: number;
+      let particleLifetime: number;
+      let particleSize: number;
+      let spawnRate: number;
+
+      switch (stageType) {
+        case 'kerolox':
+          palette = keroloxColors;
+          baseSpeed = inVacuum ? 120 : 60;
+          spread = inVacuum ? 0.45 : 0.25;
+          particleLifetime = inVacuum ? 1.2 : 0.6;
+          particleSize = inVacuum ? 2.8 : 1.5;
+          spawnRate = 120;
+          break;
+        case 'hydrolox':
+          palette = hydroloxColors;
+          baseSpeed = inVacuum ? 180 : 90;
+          spread = inVacuum ? 0.35 : 0.2;
+          particleLifetime = inVacuum ? 1.0 : 0.5;
+          particleSize = inVacuum ? 2.2 : 1.2;
+          spawnRate = 100;
+          break;
+        case 'methalox':
+          palette = methaloxColors;
+          baseSpeed = inVacuum ? 150 : 75;
+          spread = inVacuum ? 0.4 : 0.22;
+          particleLifetime = inVacuum ? 1.1 : 0.55;
+          particleSize = inVacuum ? 2.5 : 1.3;
+          spawnRate = 110;
+          break;
+        case 'ion':
+          palette = ionColors;
+          baseSpeed = 300;
+          spread = 0.08;
+          particleLifetime = 2.0;
+          particleSize = 0.8;
+          spawnRate = 60;
+          break;
+      }
+
+      const spawnCount = Math.floor(spawnRate * throttle * dt);
+      const vacuumScale = inVacuum ? 1.5 : 1.0;
+
+      // Spawn new particles
+      for (let s = 0; s < spawnCount && system.activeCount < maxParticles; s++) {
+        const idx = system.activeCount;
+        system.activeCount++;
+
+        // Position at engine exit (origin)
+        positions[idx * 3] = (Math.random() - 0.5) * 0.1;
+        positions[idx * 3 + 1] = 0;
+        positions[idx * 3 + 2] = (Math.random() - 0.5) * 0.1;
+
+        // Velocity: mainly backward with spread
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * spread;
+        const speed = baseSpeed * (0.7 + Math.random() * 0.6) * vacuumScale;
+
+        velocities[idx * 3] = -Math.sin(phi) * Math.cos(theta) * speed;
+        velocities[idx * 3 + 1] = Math.cos(phi) * speed + (Math.random() - 0.5) * 2;
+        velocities[idx * 3 + 2] = -Math.sin(phi) * Math.sin(theta) * speed;
+
+        // Lifetime and size
+        lifetimes[idx] = particleLifetime * (0.7 + Math.random() * 0.6);
+        ages[idx] = 0;
+        alphas[idx] = 1.0;
+        sizes[idx] = particleSize * (0.8 + Math.random() * 0.4) * vacuumScale;
+
+        // Color from palette with variation
+        const colorIdx = Math.floor(Math.random() * palette.length);
+        const color = palette[colorIdx];
+        colors[idx * 3] = color.r;
+        colors[idx * 3 + 1] = color.g;
+        colors[idx * 3 + 2] = color.b;
+      }
+
+      // Update existing particles
+      let aliveCount = 0;
+      for (let i = 0; i < system.activeCount; i++) {
+        ages[i] += dt;
+        const lifeRatio = ages[i] / lifetimes[i];
+
+        if (lifeRatio >= 1.0) {
+          alphas[i] = 0;
+          continue;
+        }
+
+        aliveCount++;
+
+        // Physics
+        positions[i * 3] += velocities[i * 3] * dt;
+        positions[i * 3 + 1] += velocities[i * 3 + 1] * dt;
+        positions[i * 3 + 2] += velocities[i * 3 + 2] * dt;
+
+        // Cooling/expansion
+        const coolFactor = 1.0 - lifeRatio * 0.7;
+        alphas[i] = coolFactor * coolFactor;
+        sizes[i] = particleSize * (0.8 + Math.random() * 0.4) * (1.0 + lifeRatio * 1.5) * vacuumScale;
+
+        // Color shift as it cools (shift toward red/orange for chemical, blue/violet for ion)
+        if (stageType === 'ion') {
+          const shift = lifeRatio * 0.3;
+          colors[i * 3] = Math.min(1.0, colors[i * 3] + shift);
+          colors[i * 3 + 1] = Math.min(1.0, colors[i * 3 + 1] + shift * 0.5);
+        } else {
+          const shift = lifeRatio * 0.4;
+          colors[i * 3] = Math.min(1.0, colors[i * 3] + shift);
+          colors[i * 3 + 1] = Math.max(0.0, colors[i * 3 + 1] - shift * 0.3);
+        }
+      }
+
+      system.activeCount = aliveCount;
+      geometry.attributes.position.needsUpdate = true;
+      geometry.attributes.size.needsUpdate = true;
+      geometry.attributes.color.needsUpdate = true;
+      geometry.attributes.alpha.needsUpdate = true;
+    },
+    dispose: () => {
+      geometry.dispose();
+      material.dispose();
+      particleTexture.dispose();
+    },
+  };
+
+  return system;
 }
