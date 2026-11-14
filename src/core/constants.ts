@@ -483,6 +483,139 @@ export const SPACECRAFT_PARTS: SpacecraftPart[] = [
     beginnerDesc: 'Robotic core drill & laser spectrometer for Moon or Mars surface science.',
     realisticDesc: '36 Mbps LIBS spectrometer + regolith drill; 195 kg; 65 W; Moon & Mars surface missions.',
   },
+
+  // === TIER 4 / SPECIALIZED SUBSYSTEMS ===
+
+  // 1. Structure - Tier 4: Heavy Landing Platform
+  {
+    id: 'struct-heavy-landing-platform',
+    name: 'Heavy Surface Landing Platform',
+    category: 'structure',
+    massKg: 720,
+    costM: 55,
+    leadMonths: 8,
+    drawW: 0,
+    maxPayloadKg: 1000,
+    structuralIntegrity: 4,
+    beginnerDesc: 'Massive lander base for heavy rovers, habitats, or sample return ascent vehicles.',
+    realisticDesc: '720 kg Ti-Al-V frame with 6-leg crushable struts; 1,000 kg payload cap; Tier-4 for crewed-scale Mars/Moon landings.',
+  },
+
+  // 2. Power - Tier 4: Multi-Junction Solar / RTG Hybrid
+  {
+    id: 'power-multi-junction-solar',
+    name: 'Multi-Junction Solar Arrays (30%+ Eff.)',
+    category: 'power',
+    massKg: 140,
+    costM: 28,
+    leadMonths: 4,
+    drawW: 0,
+    baseOutputW: 850,
+    isSolar: true,
+    beginnerDesc: 'Ultra-efficient space solar cells — maximum power per kg for deep-space missions.',
+    realisticDesc: '850 W BOL @ 1 AU (0 W in eclipse; 365 W @ Mars 0.43x); 30%+ multi-junction III-V cells; 140 kg.',
+  },
+  {
+    id: 'power-enhanced-rtg',
+    name: 'Enhanced MMRTG (Next-Gen Nuclear)',
+    category: 'power',
+    massKg: 180,
+    costM: 65,
+    leadMonths: 6,
+    drawW: 0,
+    baseOutputW: 420,
+    isSolar: false,
+    beginnerDesc: 'Next-gen Pu-238 generator with 50% more output — steady power for decades at any distance.',
+    realisticDesc: '420 W continuous enhanced MMRTG (100% duty in eclipse, Mars, outer planets); 180 kg; 14+ year half-life.',
+  },
+
+  // 3. Battery - Tier 4: Ultra-High-Density Solid-State
+  {
+    id: 'bat-ultra-solid-state',
+    name: 'Ultra-High-Density Solid-State Battery',
+    category: 'battery',
+    massKg: 120,
+    costM: 35,
+    leadMonths: 5,
+    drawW: 0,
+    capacityWh: 2000,
+    beginnerDesc: 'Cutting-edge solid electrolyte cells — double the energy density for extreme eclipses.',
+    realisticDesc: '2,000 Wh advanced sulfide-based solid-state bank; -40°C rated; 120 kg; enables multi-day lunar night survival.',
+  },
+
+  // 4. Computer - Tier 4: Radiation-Hardened Autonomous Flight Computer
+  {
+    id: 'cpu-radhard-autonomous',
+    name: 'Rad-Hard Autonomous Flight Computer',
+    category: 'computer',
+    massKg: 55,
+    costM: 42,
+    leadMonths: 7,
+    drawW: 75,
+    maxDataMbps: 320,
+    storageMb: 16000,
+    radHardened: true,
+    beginnerDesc: 'Fully autonomous rad-hard brain for crew-rated Mars entry, descent, and landing.',
+    realisticDesc: '320 Mbps redundant DMA bus, 16 GB NVM, triple-voting CPU + vision co-processor for Terrain-Relative Navigation; 75 W.',
+  },
+
+  // 5. ADCS - Tier 4: Star-Tracker + CMG + Optical Navigation
+  {
+    id: 'adcs-cmg-optical-nav',
+    name: 'CMG Cluster + Optical Navigation Suite',
+    category: 'adcs',
+    massKg: 95,
+    costM: 48,
+    leadMonths: 6,
+    drawW: 68,
+    pointingTier: 4,
+    deepSpaceCapable: true,
+    beginnerDesc: 'Precision CMG cluster with optical nav — arcsecond pointing plus autonomous horizon/star tracking.',
+    realisticDesc: 'Tier-4 (0.0005°); 6-CMG pyramid + dual star trackers + optical nav camera for autonomous lunar/Mars pinpoint landing; 68 W.',
+  },
+
+  // 6. Thermal - Tier 4: Active Deployable Radiator
+  {
+    id: 'thermal-deployable-radiator',
+    name: 'Active Deployable Radiator System',
+    category: 'thermal',
+    massKg: 160,
+    costM: 45,
+    leadMonths: 5,
+    drawW: 50,
+    thermalTier: 4,
+    heatShield: false,
+    beginnerDesc: 'High-capacity deployable radiators with pumped fluid loops for kilowatt-class heat rejection.',
+    realisticDesc: 'Tier-4 variable-conductance dual-loop pumped fluid + 12 m² deployable radiators; handles RTG/nuclear waste heat; 50 W.',
+  },
+
+  // 7. Payload - Tier 4: High-Res Multi-Spectral / Deep-Space Lander Science
+  {
+    id: 'payload-hyperspectral-imager',
+    name: 'Hyperspectral Planetary Imager',
+    category: 'payload',
+    massKg: 280,
+    costM: 62,
+    leadMonths: 7,
+    drawW: 120,
+    dataRateMbps: 150,
+    missionMatch: 'SPACE_TELESCOPE',
+    beginnerDesc: 'Hundreds of spectral bands for mineral mapping — telescope or orbital science flagship.',
+    realisticDesc: '150 Mbps pushbroom hyperspectral (0.4-2.5 µm, 10 nm bands); 280 kg; 120 W; requires Tier-4 ADCS; Space Telescope mission.',
+  },
+  {
+    id: 'payload-deep-space-lander-science',
+    name: 'Deep-Surface Science Suite (Drill + Mass Spec + Seismo)',
+    category: 'payload',
+    massKg: 320,
+    costM: 75,
+    leadMonths: 8,
+    drawW: 140,
+    dataRateMbps: 50,
+    missionMatch: 'SURFACE_LANDER',
+    beginnerDesc: 'Flagship lander payload: deep drill, mass spectrometer, seismometer — the full science package.',
+    realisticDesc: '50 Mbps combined: 2m regolith drill + laser mass spec + broadband seismometer; 320 kg; 140 W; Moon & Mars surface missions.',
+  },
 ];
 
 export const PARTS_BY_ID: Record<string, SpacecraftPart> = Object.fromEntries(
@@ -523,6 +656,22 @@ export const LAUNCH_VEHICLES: LaunchVehicle[] = [
     realisticDesc: '2-stage reusable-class medium lift: 620 kN S1 / 145 kN S2; ~5.85 km/s Δv @ 1,000 kg.',
   },
   {
+    id: 'launcher-medium-heavy',
+    name: 'Falcon-MH Reusable Medium-Heavy',
+    costM: 95,
+    leadMonths: 7,
+    stage1DryKg: 3200,
+    stage1PropKg: 25000,
+    stage1ThrustN: 850_000,
+    stage1IspS: 170,
+    stage2DryKg: 900,
+    stage2PropKg: 8500,
+    stage2ThrustN: 200_000,
+    stage2IspS: 285,
+    beginnerDesc: 'Reusable medium-heavy lifter (~7,200 m/s Δv) bridging Moon & Mars missions with booster return.',
+    realisticDesc: '2-stage partially reusable methalox: 850 kN S1 (RTLS-capable) / 200 kN S2 hydrolox upper; ~7.2 km/s Δv @ 1,500 kg to TLI.',
+  },
+  {
     id: 'launcher-heavy',
     name: 'Ares-H Heavy Interplanetary',
     costM: 125,
@@ -537,6 +686,22 @@ export const LAUNCH_VEHICLES: LaunchVehicle[] = [
     stage2IspS: 275,
     beginnerDesc: 'Colossal interplanetary booster (~6,850 m/s Δv) with muscle to reach Mars.',
     realisticDesc: '2-stage heavy hydrolox upper stage: 1.18 MN S1 / 255 kN S2; ~6.85 km/s Δv @ 1,100 kg.',
+  },
+  {
+    id: 'launcher-super-heavy',
+    name: 'Nova-S Super-Heavy Interplanetary',
+    costM: 220,
+    leadMonths: 12,
+    stage1DryKg: 7500,
+    stage1PropKg: 68000,
+    stage1ThrustN: 2_400_000,
+    stage1IspS: 195,
+    stage2DryKg: 2200,
+    stage2PropKg: 24000,
+    stage2ThrustN: 480_000,
+    stage2IspS: 320,
+    beginnerDesc: 'Mega-rocket (~9,800 m/s Δv) for crewed Mars, outer planets, and massive station modules.',
+    realisticDesc: '2-stage fully expendable methalox/ hydrolox: 2.4 MN S1 / 480 kN S2; ~9.8 km/s Δv @ 3,500 kg to TMI; enables single-launch Mars return architecture.',
   },
 ];
 
@@ -680,6 +845,50 @@ export const RECOMMENDED_LOADOUTS: Record<MissionId, SpacecraftConfig> = {
     thermalId: 'thermal-heavy-rad-shield',
     payloadId: 'payload-surface-lander',
     launcherId: 'launcher-heavy',
+  },
+};
+
+// === TIER 4 / ADVANCED RECOMMENDED LOADOUTS (for higher difficulty / extended missions) ===
+export const ADVANCED_LOADOUTS: Record<MissionId, SpacecraftConfig> = {
+  EARTH_OBSERVATION: {
+    structureId: 'struct-modular-bus',
+    powerId: 'power-multi-junction-solar',
+    batteryId: 'bat-solid-state',
+    computerId: 'cpu-ai-edge',
+    adcsId: 'adcs-cmg-optical-nav',
+    thermalId: 'thermal-deployable-radiator',
+    payloadId: 'payload-hyperspectral-imager',
+    launcherId: 'launcher-medium-heavy',
+  },
+  SPACE_TELESCOPE: {
+    structureId: 'struct-modular-bus',
+    powerId: 'power-multi-junction-solar',
+    batteryId: 'bat-ultra-solid-state',
+    computerId: 'cpu-radhard-autonomous',
+    adcsId: 'adcs-cmg-optical-nav',
+    thermalId: 'thermal-deployable-radiator',
+    payloadId: 'payload-hyperspectral-imager',
+    launcherId: 'launcher-medium-heavy',
+  },
+  MOON_LANDING: {
+    structureId: 'struct-heavy-landing-platform',
+    powerId: 'power-enhanced-rtg',
+    batteryId: 'bat-ultra-solid-state',
+    computerId: 'cpu-radhard-autonomous',
+    adcsId: 'adcs-cmg-optical-nav',
+    thermalId: 'thermal-deployable-radiator',
+    payloadId: 'payload-deep-space-lander-science',
+    launcherId: 'launcher-super-heavy',
+  },
+  MARS_LANDING: {
+    structureId: 'struct-heavy-landing-platform',
+    powerId: 'power-enhanced-rtg',
+    batteryId: 'bat-ultra-solid-state',
+    computerId: 'cpu-radhard-autonomous',
+    adcsId: 'adcs-cmg-optical-nav',
+    thermalId: 'thermal-heavy-rad-shield',
+    payloadId: 'payload-deep-space-lander-science',
+    launcherId: 'launcher-super-heavy',
   },
 };
 
