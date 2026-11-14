@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { validateSpacecraft } from '../core/spacecraftValidator';
 import {
-  generateHangarHints,
   generateDebriefAnalysis,
   getRobotImage,
   type RobotHint,
@@ -10,16 +8,12 @@ import { useMissionStore } from '../store/useMissionStore';
 
 /**
  * RobotAssistant Component
- * Displays contextual AI hints during HANGAR (building) and DEBRIEF (post-flight analysis)
+ * Displays AI failure analysis only during DEBRIEF phase for unsuccessful missions
  * Uses deterministic rule-based AI with no API tokens required
  */
 export const RobotAssistant: React.FC = () => {
   const phase = useMissionStore((s) => s.phase);
   const difficulty = useMissionStore((s) => s.difficulty);
-  const missionId = useMissionStore((s) => s.missionId);
-  const spacecraft = useMissionStore((s) => s.spacecraft);
-  const ground = useMissionStore((s) => s.ground);
-  const coupledMetrics = useMissionStore((s) => s.coupledMetrics);
   const debrief = useMissionStore((s) => s.debrief);
   const flight = useMissionStore((s) => s.flight);
 
@@ -27,30 +21,23 @@ export const RobotAssistant: React.FC = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
 
-  // Generate hints based on current phase
+  // Generate hints only for DEBRIEF phase when mission FAILED
   useEffect(() => {
-    if (phase === 'HANGAR') {
-      // Generate hangar building hints
-      const validation = validateSpacecraft(missionId, spacecraft, difficulty, ground);
-      const newHint = generateHangarHints(
-        validation,
-        validation.conflicts,
-        coupledMetrics,
-        missionId,
-        difficulty
-      );
-      setHint(newHint);
-      setIsVisible(true);
-    } else if (phase === 'DEBRIEF' && debrief && flight) {
-      // Generate post-flight analysis
-      const newHint = generateDebriefAnalysis(debrief, flight, difficulty);
-      setHint(newHint);
-      setIsVisible(true);
+    if (phase === 'DEBRIEF' && debrief && flight) {
+      // Only show robot for FAILED missions
+      if (debrief.outcome === 'FAILED') {
+        const newHint = generateDebriefAnalysis(debrief, flight, difficulty);
+        setHint(newHint);
+        setIsVisible(true);
+      } else {
+        // Hide for successful missions
+        setIsVisible(false);
+      }
     } else {
-      // Hide in other phases (TITLE, OBJECTIVE_SELECT, GROUND_SEGMENT, FLIGHT)
+      // Hide in all other phases (TITLE, OBJECTIVE_SELECT, HANGAR, GROUND_SEGMENT, FLIGHT)
       setIsVisible(false);
     }
-  }, [phase, spacecraft, ground, coupledMetrics, debrief, flight, missionId, difficulty]);
+  }, [phase, debrief, flight, difficulty]);
 
   if (!isVisible || !hint) return null;
 
@@ -86,17 +73,12 @@ export const RobotAssistant: React.FC = () => {
           {/* Hint bubble */}
           <div className="robot-bubble">
             <div className="robot-bubble-header">
-              <span className="robot-name">AI Assistant</span>
-              {phase === 'HANGAR' && (
-                <span className="robot-phase-badge">BUILD HINTS</span>
-              )}
-              {phase === 'DEBRIEF' && (
-                <span className="robot-phase-badge">FLIGHT ANALYSIS</span>
-              )}
+              <span className="robot-name">AI Failure Analysis</span>
+              <span className="robot-phase-badge">MISSION DEBRIEF</span>
             </div>
             <div className="robot-message">{hint.message}</div>
             {hint.priority === 'critical' && (
-              <div className="robot-priority-indicator">🚨 Critical Issue</div>
+              <div className="robot-priority-indicator">🚨 Critical Failure</div>
             )}
           </div>
         </>
