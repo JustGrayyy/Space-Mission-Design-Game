@@ -1,0 +1,707 @@
+import type {
+  CommsBandId,
+  CommsBandSpec,
+  GroundConfig,
+  GroundStationSpec,
+  LaunchVehicle,
+  MissionId,
+  MissionSpec,
+  SpacecraftConfig,
+  SpacecraftPart,
+} from './types';
+
+// Physical & Scaled Solar-System Constants (Gameplay-balanced scale)
+export const G0 = 9.80665;
+
+export const EARTH_RADIUS_M = 600_000;
+export const EARTH_MU = 3.84e12;
+export const EARTH_ATM_TOP_M = 80_000;
+export const EARTH_SCALE_HEIGHT_M = 11_000;
+export const EARTH_RHO0 = 1.225;
+export const EARTH_ROT_RATE = (2 * Math.PI) / 1800; // 30-min scaled Earth day
+
+export const MOON_ORBIT_M = 3_200_000;
+export const MOON_RADIUS_M = 160_000;
+export const MOON_MU = 1.1e11;
+export const MOON_SOI_M = 550_000;
+export const MOON_ANGULAR_RATE = Math.sqrt(EARTH_MU / Math.pow(MOON_ORBIT_M, 3));
+
+export const MARS_TRANSFER_M = 6_500_000;
+export const MARS_RADIUS_M = 320_000;
+export const MARS_MU = 4.2e11;
+export const MARS_ATM_TOP_M = 45_000;
+export const MARS_SCALE_HEIGHT_M = 9_000;
+export const MARS_RHO0 = 0.04;
+export const MARS_SOI_M = 900_000;
+export const MARS_IRRADIANCE = 0.43;
+export const MARS_ANGULAR_RATE = Math.sqrt(EARTH_MU / Math.pow(MARS_TRANSFER_M, 3)) * 0.5;
+
+export const DEEP_SPACE_ORBIT_M = 2_400_000; // 1,800 km altitude above Earth surface
+
+export const SUN_DIRECTION = { x: 1, y: 0, z: 0 } as const;
+
+export const LIFETIME_OPS_COST_M: Record<1 | 3 | 5, number> = {
+  1: 6,
+  3: 15,
+  5: 25,
+};
+
+export const MISSIONS: Record<MissionId, MissionSpec> = {
+  EARTH_OBSERVATION: {
+    id: 'EARTH_OBSERVATION',
+    title: 'Earth Climate & Wildfire Sentinel',
+    subtitle: 'Low Earth Orbit (150 km) Multispectral Mapper',
+    targetType: 'LEO',
+    targetDeltaVMs: 3100,
+    budgetCapM: 175,
+    scheduleLimitMonths: 18,
+    irradianceFactor: 1.0,
+    eclipseDurationSec: 520,
+    requiredPayloadMatch: 'EARTH_OBSERVATION',
+    requiredAdcsTier: 1,
+    requiresDeepSpaceAdcs: false,
+    requiresRadHardCpu: false,
+    requiredThermalTier: 1,
+    requiresHeatShield: false,
+    requiresLanderStructure: false,
+    targetScienceMb: 300,
+    orbitAltitudeTargetM: 150_000,
+    distanceCommsFactor: 1.0,
+    observationDutyCycle: 0.22,
+    referencePeriodSec: 1960,
+    pros: [
+      'Lowest Δv & launch cost — Light launcher handles it cleanly',
+      'Full 100% solar irradiance & fast DSN ground passes',
+      'Short 18-month build & quick orbital insertion',
+    ],
+    challenges: [
+      'Orbit below 80 km suffers rapid atmospheric drag & decay',
+      'Frequent Earth shadow eclipses drain undersized batteries',
+      'High-rate multispectral bursts overflow S-Band links',
+    ],
+    beginnerBrief:
+      'Put a climate-tracking camera into Low Earth Orbit above 100 km, keep power alive through Earth shadow, and beam 300 MB of imagery home.',
+    realisticBrief:
+      'Insert a multispectral EO bus into >100 km LEO (v_circ ≈ 2,310 m/s), balance 520 s eclipse DoD, and avoid buffer saturation via X-Band downlink.',
+  },
+  SPACE_TELESCOPE: {
+    id: 'SPACE_TELESCOPE',
+    title: 'Deep-Space Infrared Observatory',
+    subtitle: 'High Earth Orbit (1,800 km) Cryogenic Telescope',
+    targetType: 'DEEP_SPACE_ORBIT',
+    targetDeltaVMs: 4100,
+    budgetCapM: 320,
+    scheduleLimitMonths: 24,
+    irradianceFactor: 1.0,
+    eclipseDurationSec: 360,
+    requiredPayloadMatch: 'SPACE_TELESCOPE',
+    requiredAdcsTier: 3,
+    requiresDeepSpaceAdcs: true,
+    requiresRadHardCpu: true,
+    requiredThermalTier: 2,
+    requiresHeatShield: false,
+    requiresLanderStructure: false,
+    targetScienceMb: 600,
+    orbitAltitudeTargetM: DEEP_SPACE_ORBIT_M - EARTH_RADIUS_M,
+    distanceCommsFactor: 0.8,
+    observationDutyCycle: 0.25,
+    referencePeriodSec: 6000,
+    pros: [
+      'Minimal eclipse time in 1,800 km high orbit',
+      'Zero atmospheric drag once circularized',
+      'Massive science return per observation dwell',
+    ],
+    challenges: [
+      'Demands arcsecond CMG pointing (Tier 3 ADCS) to avoid blurred stars',
+      '75 Mbps IR detector requires high-throughput OBC + Ka-Band downlink',
+      'Radiation belt exposure requires rad-hardened flight computer',
+    ],
+    beginnerBrief:
+      'Boost a giant infrared telescope 1,800 km above Earth with razor-sharp gyro pointing, radiation shielding, and ultra-fast Ka-Band radio.',
+    realisticBrief:
+      'Execute Hohmann transfer to r = 2,400 km (Δv ≈ 3,720 m/s), maintain Tier-3 CMG pointing stability, and clear 75 Mbps detector data via Ka-Band.',
+  },
+  MOON_LANDING: {
+    id: 'MOON_LANDING',
+    title: 'Artemis Polar Ice Prospecting Lander',
+    subtitle: 'Lunar Transfer, Capture & Soft Touchdown',
+    targetType: 'MOON_SURFACE',
+    targetDeltaVMs: 4800,
+    budgetCapM: 330,
+    scheduleLimitMonths: 24,
+    irradianceFactor: 1.0,
+    eclipseDurationSec: 900,
+    requiredPayloadMatch: 'SURFACE_LANDER',
+    requiredAdcsTier: 2,
+    requiresDeepSpaceAdcs: true,
+    requiresRadHardCpu: true,
+    requiredThermalTier: 2,
+    requiresHeatShield: false,
+    requiresLanderStructure: true,
+    targetScienceMb: 400,
+    orbitAltitudeTargetM: MOON_ORBIT_M - EARTH_RADIUS_M,
+    distanceCommsFactor: 0.65,
+    observationDutyCycle: 0.16,
+    referencePeriodSec: 3600,
+    pros: [
+      'No atmosphere to burn through — pure propulsive descent',
+      'Full 1.0x solar irradiance in sunlit lunar zones',
+      'Medium launcher reaches lunar orbit & touchdown cleanly',
+    ],
+    challenges: [
+      'Needs reinforced lander legs for surface touchdown',
+      'Long 900 s lunar eclipses require deep battery reserves',
+      'Earth-Moon line-of-sight benefits strongly from Lunar Relay',
+    ],
+    beginnerBrief:
+      'Fly from Earth orbit to the Moon, brake gently onto the lunar surface with reinforced lander legs, drill ice samples, and radio 400 MB back.',
+    realisticBrief:
+      'Perform TLI to 3,200 km Moon orbit, capture inside Moon SOI (μ = 1.1e11), execute powered descent (<12 m/s touchdown), and sustain 900 s eclipse.',
+  },
+  MARS_LANDING: {
+    id: 'MARS_LANDING',
+    title: 'Ares Astrobiology Surface Rover',
+    subtitle: 'Interplanetary Transfer, Aerobrake & Mars Landing',
+    targetType: 'MARS_SURFACE',
+    targetDeltaVMs: 6000,
+    budgetCapM: 420,
+    scheduleLimitMonths: 30,
+    irradianceFactor: MARS_IRRADIANCE,
+    eclipseDurationSec: 1200,
+    requiredPayloadMatch: 'SURFACE_LANDER',
+    requiredAdcsTier: 2,
+    requiresDeepSpaceAdcs: true,
+    requiresRadHardCpu: true,
+    requiredThermalTier: 3,
+    requiresHeatShield: true,
+    requiresLanderStructure: true,
+    targetScienceMb: 500,
+    orbitAltitudeTargetM: MARS_TRANSFER_M - EARTH_RADIUS_M,
+    distanceCommsFactor: 0.35,
+    observationDutyCycle: 0.12,
+    referencePeriodSec: 4800,
+    pros: [
+      'Mars upper atmosphere enables free aerobraking deceleration',
+      'Premier flagship science return across all subsystems',
+    ],
+    challenges: [
+      'Sunlight drops to 43% (0.43x) — solar arrays lose over half their output',
+      'Atmospheric entry burns up any lander missing PICA-X heatshield',
+      'Heavy launcher + rad-hard computer + X/Ka-Band essential for deep space',
+    ],
+    beginnerBrief:
+      'Our toughest voyage: ride a Heavy rocket to Mars, survive fiery entry behind a heatshield, power through dim 43% sunlight with RTG nuclear power, and send 500 MB home.',
+    realisticBrief:
+      'Execute TMI to 6,500 km Mars SOI, survive 45 km atmospheric entry peak heating with aeroshell shield, manage 0.43x irradiance & 0.35x deep-space link margin.',
+  },
+};
+
+export const SPACECRAFT_PARTS: SpacecraftPart[] = [
+  // 1. Structure
+  {
+    id: 'struct-micro-bus',
+    name: 'MicroSat Composite Frame',
+    category: 'structure',
+    massKg: 180,
+    costM: 10,
+    leadMonths: 2,
+    drawW: 0,
+    maxPayloadKg: 180,
+    structuralIntegrity: 1,
+    beginnerDesc: 'Featherweight satellite frame for Earth orbit. Too fragile for landing.',
+    realisticDesc: '180 kg carbon-honeycomb bus; 180 kg payload cap; Tier-1 structural load (no landing struts).',
+  },
+  {
+    id: 'struct-modular-bus',
+    name: 'Modular Hex Bus',
+    category: 'structure',
+    massKg: 320,
+    costM: 20,
+    leadMonths: 4,
+    drawW: 0,
+    maxPayloadKg: 350,
+    structuralIntegrity: 2,
+    beginnerDesc: 'Sturdy mid-weight octagonal spacecraft frame built for large telescopes.',
+    realisticDesc: '320 kg Al-Li hex frame; 350 kg payload cap; Tier-2 stiffness for precision optical benches.',
+  },
+  {
+    id: 'struct-lander-chassis',
+    name: 'Reinforced Lander Chassis',
+    category: 'structure',
+    massKg: 480,
+    costM: 34,
+    leadMonths: 6,
+    drawW: 0,
+    maxPayloadKg: 600,
+    structuralIntegrity: 3,
+    beginnerDesc: 'Heavy-duty spacecraft frame with crushable landing legs for Moon or Mars.',
+    realisticDesc: '480 kg Ti-6Al-4V chassis with 4-leg shock attenuation; 600 kg payload cap; Tier-3 landing rated.',
+  },
+
+  // 2. Power
+  {
+    id: 'power-small-solar',
+    name: 'Compact Solar Wings',
+    category: 'power',
+    massKg: 45,
+    costM: 8,
+    leadMonths: 1,
+    drawW: 0,
+    baseOutputW: 220,
+    isSolar: true,
+    beginnerDesc: 'Light fold-out solar panels. Great near Earth, weak out at Mars.',
+    realisticDesc: '220 W BOL @ 1 AU (0 W in eclipse; 94.6 W @ Mars 0.43x irradiance); 45 kg.',
+  },
+  {
+    id: 'power-large-solar',
+    name: 'High-Area Deployable Arrays',
+    category: 'power',
+    massKg: 110,
+    costM: 18,
+    leadMonths: 3,
+    drawW: 0,
+    baseOutputW: 560,
+    isSolar: true,
+    beginnerDesc: 'Huge high-efficiency solar wings for hungry telescopes or lunar craft.',
+    realisticDesc: '560 W BOL @ 1 AU (0 W in eclipse; 240.8 W @ Mars 0.43x irradiance); 110 kg.',
+  },
+  {
+    id: 'power-rtg',
+    name: 'Multi-Mission RTG Nuclear',
+    category: 'power',
+    massKg: 140,
+    costM: 42,
+    leadMonths: 5,
+    drawW: 0,
+    baseOutputW: 280,
+    isSolar: false,
+    beginnerDesc: 'Pu-238 nuclear battery that outputs steady 280 W day and night—even at Mars!',
+    realisticDesc: '280 W continuous radioisotope thermoelectric generator (100% duty in eclipse & Mars); 140 kg.',
+  },
+
+  // 3. Battery
+  {
+    id: 'bat-liion-small',
+    name: 'Small Li-Ion Pack',
+    category: 'battery',
+    massKg: 15,
+    costM: 5,
+    leadMonths: 1,
+    drawW: 0,
+    capacityWh: 35,
+    beginnerDesc: 'Tiny backup battery (35 Wh) for quick LEO passes or RTG-powered missions.',
+    realisticDesc: '35 Wh secondary Li-Ion cell stack; 15 kg; insufficient for long deep-space eclipses.',
+  },
+  {
+    id: 'bat-liion-med',
+    name: 'Dual-Bus Li-Ion Bank',
+    category: 'battery',
+    massKg: 60,
+    costM: 12,
+    leadMonths: 2,
+    drawW: 0,
+    capacityWh: 520,
+    beginnerDesc: 'Balanced energy storage to keep instruments alive through orbital night.',
+    realisticDesc: '520 Wh redundant dual-string Li-Ion bank; handles LEO & HEO eclipses cleanly; 60 kg.',
+  },
+  {
+    id: 'bat-solid-state',
+    name: 'High-Density Solid-State Bank',
+    category: 'battery',
+    massKg: 95,
+    costM: 22,
+    leadMonths: 4,
+    drawW: 0,
+    capacityWh: 1100,
+    beginnerDesc: 'Massive energy reserve built to survive freezing 15-minute lunar nights.',
+    realisticDesc: '1,100 Wh solid-state cold-rated bank for high-draw lunar/deep-space eclipses; 95 kg.',
+  },
+
+  // 4. Computer
+  {
+    id: 'cpu-basic-mcu',
+    name: 'COTS Flight MCU',
+    category: 'computer',
+    massKg: 12,
+    costM: 4,
+    leadMonths: 1,
+    drawW: 18,
+    maxDataMbps: 30,
+    storageMb: 450,
+    radHardened: false,
+    beginnerDesc: 'Cheap Earth-orbit processor. Can glitch in deep-space radiation and holds small memory.',
+    realisticDesc: '30 Mbps bus, 450 MB flash, unshielded COTS silicon (SEU risk beyond LEO); 18 W.',
+  },
+  {
+    id: 'cpu-radhard-obc',
+    name: 'Rad-Hardened Flight OBC',
+    category: 'computer',
+    massKg: 28,
+    costM: 16,
+    leadMonths: 3,
+    drawW: 32,
+    maxDataMbps: 60,
+    storageMb: 2400,
+    radHardened: true,
+    beginnerDesc: 'Space-hardened computer immune to cosmic radiation with big 2.4 GB buffer.',
+    realisticDesc: '60 Mbps ECC bus, 2,400 MB rad-tolerant buffer, triple-modular redundancy; 32 W.',
+  },
+  {
+    id: 'cpu-ai-edge',
+    name: 'Deep-Space AI Edge Processor',
+    category: 'computer',
+    massKg: 42,
+    costM: 28,
+    leadMonths: 5,
+    drawW: 55,
+    maxDataMbps: 160,
+    storageMb: 8000,
+    radHardened: true,
+    beginnerDesc: 'Ultra-fast rad-hard supercomputer for giant telescopes and autonomous Mars landings.',
+    realisticDesc: '160 Mbps DMA bus, 8,000 MB NVM buffer, rad-hardened vision/EDL co-processor; 55 W.',
+  },
+
+  // 5. ADCS
+  {
+    id: 'adcs-magnetorquer',
+    name: 'Magnetorquer + Sun Sensor',
+    category: 'adcs',
+    massKg: 15,
+    costM: 5,
+    leadMonths: 1,
+    drawW: 12,
+    pointingTier: 1,
+    deepSpaceCapable: false,
+    beginnerDesc: 'Simple magnetic steering coils. Works only close to Earth; useless near Moon/Mars.',
+    realisticDesc: 'Tier-1 (1.5°); 3-axis torque rods requiring Earth magnetosphere (LEO only); 12 W.',
+  },
+  {
+    id: 'adcs-reaction-wheels',
+    name: 'Reaction Wheels + Star Tracker',
+    category: 'adcs',
+    massKg: 38,
+    costM: 16,
+    leadMonths: 3,
+    drawW: 30,
+    pointingTier: 2,
+    deepSpaceCapable: true,
+    beginnerDesc: 'Spinning gyro wheels & star camera for steady deep-space navigation and landings.',
+    realisticDesc: 'Tier-2 (0.05°); 4-wheel skewed assembly + optical star tracker; deep-space rated; 30 W.',
+  },
+  {
+    id: 'adcs-cmg-precision',
+    name: 'Dual CMG + Laser IMU',
+    category: 'adcs',
+    massKg: 68,
+    costM: 30,
+    leadMonths: 4,
+    drawW: 52,
+    pointingTier: 3,
+    deepSpaceCapable: true,
+    beginnerDesc: 'Arcsecond precision gyroscopes needed so space telescopes stay rock-steady.',
+    realisticDesc: 'Tier-3 (0.002°); control moment gyros + ring-laser IMU for diffraction-limited optics; 52 W.',
+  },
+
+  // 6. Thermal
+  {
+    id: 'thermal-passive-mli',
+    name: 'Passive MLI Gold Blankets',
+    category: 'thermal',
+    massKg: 18,
+    costM: 4,
+    leadMonths: 1,
+    drawW: 10,
+    thermalTier: 1,
+    heatShield: false,
+    beginnerDesc: 'Foil insulation blankets for mild Earth orbit. Cannot survive deep-space cold or entry.',
+    realisticDesc: 'Tier-1 Kapton MLI; adequate for LEO only; no radiator louvers or aeroshell; 10 W.',
+  },
+  {
+    id: 'thermal-active-louvers',
+    name: 'Active Heat Pipes & Louvers',
+    category: 'thermal',
+    massKg: 45,
+    costM: 14,
+    leadMonths: 2,
+    drawW: 25,
+    thermalTier: 2,
+    heatShield: false,
+    beginnerDesc: 'Active cooling & heating loops built for Lunar and deep-space temperature swings.',
+    realisticDesc: 'Tier-2 variable-conductance heat pipes + mechanical louvers; Moon/HEO rated; 25 W.',
+  },
+  {
+    id: 'thermal-heavy-rad-shield',
+    name: 'PICA-X Aeroshell & Cryo Shield',
+    category: 'thermal',
+    massKg: 125,
+    costM: 28,
+    leadMonths: 4,
+    drawW: 35,
+    thermalTier: 3,
+    heatShield: true,
+    beginnerDesc: 'Armored ablative heatshield essential to survive fiery atmospheric entry at Mars.',
+    realisticDesc: 'Tier-3 phenolic-impregnated carbon ablator heatshield + deep-space MLI; Mars EDL rated; 35 W.',
+  },
+
+  // 7. Payload
+  {
+    id: 'payload-eo-camera',
+    name: 'Multispectral Earth Imager',
+    category: 'payload',
+    massKg: 75,
+    costM: 18,
+    leadMonths: 3,
+    drawW: 45,
+    dataRateMbps: 28,
+    missionMatch: 'EARTH_OBSERVATION',
+    beginnerDesc: 'High-res Earth climate & wildfire camera.',
+    realisticDesc: '28 Mbps pushbroom VNIR/SWIR mapper; 75 kg; 45 W; Earth Observation mission.',
+  },
+  {
+    id: 'payload-ir-telescope',
+    name: 'Cryogenic IR Space Telescope',
+    category: 'payload',
+    massKg: 210,
+    costM: 46,
+    leadMonths: 6,
+    drawW: 90,
+    dataRateMbps: 75,
+    missionMatch: 'SPACE_TELESCOPE',
+    beginnerDesc: 'Massive cooled mirror array for peering at distant galaxies.',
+    realisticDesc: '75 Mbps HgCdTe focal plane; 210 kg; 90 W; requires Tier-3 ADCS; Space Telescope mission.',
+  },
+  {
+    id: 'payload-surface-lander',
+    name: 'Autonomous Drill & ChemCam Lab',
+    category: 'payload',
+    massKg: 195,
+    costM: 38,
+    leadMonths: 5,
+    drawW: 65,
+    dataRateMbps: 36,
+    missionMatch: 'SURFACE_LANDER',
+    beginnerDesc: 'Robotic core drill & laser spectrometer for Moon or Mars surface science.',
+    realisticDesc: '36 Mbps LIBS spectrometer + regolith drill; 195 kg; 65 W; Moon & Mars surface missions.',
+  },
+];
+
+export const PARTS_BY_ID: Record<string, SpacecraftPart> = Object.fromEntries(
+  SPACECRAFT_PARTS.map((p) => [p.id, p])
+);
+
+export const LAUNCH_VEHICLES: LaunchVehicle[] = [
+  {
+    id: 'launcher-light',
+    name: 'Vega-L SmallSat Launcher',
+    costM: 38,
+    leadMonths: 4,
+    stage1DryKg: 1100,
+    stage1PropKg: 7200,
+    stage1ThrustN: 260_000,
+    stage1IspS: 150,
+    stage2DryKg: 380,
+    stage2PropKg: 2400,
+    stage2ThrustN: 60_000,
+    stage2IspS: 195,
+    beginnerDesc: 'Affordable light rocket (~4,010 m/s Δv) perfect for Earth orbit satellites.',
+    realisticDesc: '2-stage kerolox light vehicle: 260 kN S1 / 60 kN S2; ~4.01 km/s Δv @ 450 kg payload.',
+  },
+  {
+    id: 'launcher-medium',
+    name: 'Falcon-M Medium Lift',
+    costM: 72,
+    leadMonths: 6,
+    stage1DryKg: 2400,
+    stage1PropKg: 18000,
+    stage1ThrustN: 620_000,
+    stage1IspS: 165,
+    stage2DryKg: 680,
+    stage2PropKg: 6200,
+    stage2ThrustN: 145_000,
+    stage2IspS: 270,
+    beginnerDesc: 'Dependable workhorse rocket (~5,850 m/s Δv) built for Moon landers & telescopes.',
+    realisticDesc: '2-stage reusable-class medium lift: 620 kN S1 / 145 kN S2; ~5.85 km/s Δv @ 1,000 kg.',
+  },
+  {
+    id: 'launcher-heavy',
+    name: 'Ares-H Heavy Interplanetary',
+    costM: 125,
+    leadMonths: 8,
+    stage1DryKg: 4200,
+    stage1PropKg: 34000,
+    stage1ThrustN: 1_180_000,
+    stage1IspS: 185,
+    stage2DryKg: 1150,
+    stage2PropKg: 11500,
+    stage2ThrustN: 255_000,
+    stage2IspS: 275,
+    beginnerDesc: 'Colossal interplanetary booster (~6,850 m/s Δv) with muscle to reach Mars.',
+    realisticDesc: '2-stage heavy hydrolox upper stage: 1.18 MN S1 / 255 kN S2; ~6.85 km/s Δv @ 1,100 kg.',
+  },
+];
+
+export const LAUNCHERS_BY_ID: Record<string, LaunchVehicle> = Object.fromEntries(
+  LAUNCH_VEHICLES.map((l) => [l.id, l])
+);
+
+export const GROUND_STATIONS: GroundStationSpec[] = [
+  {
+    id: 'goldstone',
+    name: 'DSN Goldstone (California)',
+    latDeg: 35.4,
+    lonDeg: -116.9,
+    costM: 0,
+    leadMonths: 0,
+    minElevationDeg: 5,
+    beginnerDesc: 'Included NASA deep-space dish covering North America & Pacific passes.',
+    realisticDesc: '70m DSS-14 complex (35.4°N, 116.9°W); 5° horizon mask; baseline NASA allocation.',
+  },
+  {
+    id: 'madrid',
+    name: 'DSN Madrid (Spain)',
+    latDeg: 40.4,
+    lonDeg: -4.2,
+    costM: 0,
+    leadMonths: 0,
+    minElevationDeg: 5,
+    beginnerDesc: 'Included NASA dish covering Europe, Africa & Atlantic passes.',
+    realisticDesc: '70m DSS-63 complex (40.4°N, 4.2°W); 5° horizon mask; baseline NASA allocation.',
+  },
+  {
+    id: 'canberra',
+    name: 'DSN Canberra (Australia)',
+    latDeg: -35.4,
+    lonDeg: 149.0,
+    costM: 0,
+    leadMonths: 0,
+    minElevationDeg: 5,
+    beginnerDesc: 'Included Southern Hemisphere NASA dish completing global longitude coverage.',
+    realisticDesc: '70m DSS-43 complex (35.4°S, 149.0°E); 5° horizon mask; baseline NASA allocation.',
+  },
+  {
+    id: 'svalbard',
+    name: 'Svalbard Polar Station (Norway)',
+    latDeg: 78.2,
+    lonDeg: 15.4,
+    costM: 14,
+    leadMonths: 2,
+    minElevationDeg: 5,
+    beginnerDesc: 'High-latitude Arctic dish adding frequent polar & LEO contact passes.',
+    realisticDesc: 'SvalSat 78.2°N polar gateway; +18% LEO contact duty cycle; $14M / +2 mo.',
+  },
+  {
+    id: 'lunar-relay',
+    name: 'Lunar Orbital Relay Constellation',
+    latDeg: 0,
+    lonDeg: 0,
+    costM: 24,
+    leadMonths: 3,
+    isOrbitalRelay: true,
+    minElevationDeg: 0,
+    beginnerDesc: 'Dedicated relay satellites keeping continuous line-of-sight to deep space & the Moon.',
+    realisticDesc: 'Cis-lunar relay mesh providing continuous deep-space & far-side visibility; $24M / +3 mo.',
+  },
+];
+
+export const GROUND_STATIONS_BY_ID: Record<string, GroundStationSpec> = Object.fromEntries(
+  GROUND_STATIONS.map((g) => [g.id, g])
+);
+
+export const COMMS_BANDS: Record<CommsBandId, CommsBandSpec> = {
+  S_BAND: {
+    id: 'S_BAND',
+    name: 'S-Band (2.2 GHz)',
+    bandwidthMbps: 8,
+    costM: 0,
+    leadMonths: 0,
+    drawW: 15,
+    beginnerDesc: 'Basic low-speed radio (8 Mbps). Free, but high-res cameras can overflow memory!',
+    realisticDesc: '8 Mbps S-band TT&C transceiver; 15 W RF draw; $0M / 0 mo; prone to science backlog.',
+  },
+  X_BAND: {
+    id: 'X_BAND',
+    name: 'X-Band (8.4 GHz)',
+    bandwidthMbps: 45,
+    costM: 12,
+    leadMonths: 2,
+    drawW: 35,
+    beginnerDesc: 'Fast science radio (45 Mbps) ideal for Earth cameras, Moon landers & Mars.',
+    realisticDesc: '45 Mbps X-band high-gain dish; 35 W RF draw; $12M / +2 mo; standard deep-space link.',
+  },
+  KA_BAND: {
+    id: 'KA_BAND',
+    name: 'Ka-Band (32 GHz)',
+    bandwidthMbps: 120,
+    costM: 26,
+    leadMonths: 4,
+    drawW: 60,
+    beginnerDesc: 'Blazing-fast laser-grade radio (120 Mbps) built for massive space telescope data.',
+    realisticDesc: '120 Mbps Ka-band phased array; 60 W RF draw; $26M / +4 mo; clears 75 Mbps IR imagers.',
+  },
+};
+
+export const RECOMMENDED_LOADOUTS: Record<MissionId, SpacecraftConfig> = {
+  EARTH_OBSERVATION: {
+    structureId: 'struct-micro-bus',
+    powerId: 'power-small-solar',
+    batteryId: 'bat-liion-med',
+    computerId: 'cpu-radhard-obc',
+    adcsId: 'adcs-reaction-wheels',
+    thermalId: 'thermal-passive-mli',
+    payloadId: 'payload-eo-camera',
+    launcherId: 'launcher-light',
+  },
+  SPACE_TELESCOPE: {
+    structureId: 'struct-modular-bus',
+    powerId: 'power-large-solar',
+    batteryId: 'bat-liion-med',
+    computerId: 'cpu-ai-edge',
+    adcsId: 'adcs-cmg-precision',
+    thermalId: 'thermal-active-louvers',
+    payloadId: 'payload-ir-telescope',
+    launcherId: 'launcher-medium',
+  },
+  MOON_LANDING: {
+    structureId: 'struct-lander-chassis',
+    powerId: 'power-large-solar',
+    batteryId: 'bat-solid-state',
+    computerId: 'cpu-radhard-obc',
+    adcsId: 'adcs-reaction-wheels',
+    thermalId: 'thermal-active-louvers',
+    payloadId: 'payload-surface-lander',
+    launcherId: 'launcher-medium',
+  },
+  MARS_LANDING: {
+    structureId: 'struct-lander-chassis',
+    powerId: 'power-rtg',
+    batteryId: 'bat-liion-med',
+    computerId: 'cpu-ai-edge',
+    adcsId: 'adcs-reaction-wheels',
+    thermalId: 'thermal-heavy-rad-shield',
+    payloadId: 'payload-surface-lander',
+    launcherId: 'launcher-heavy',
+  },
+};
+
+export const RECOMMENDED_GROUND: Record<MissionId, GroundConfig> = {
+  EARTH_OBSERVATION: {
+    activeStationIds: ['goldstone', 'madrid', 'canberra'],
+    bandId: 'X_BAND',
+    plannedLifetimeYears: 1,
+  },
+  SPACE_TELESCOPE: {
+    activeStationIds: ['goldstone', 'madrid', 'canberra'],
+    bandId: 'KA_BAND',
+    plannedLifetimeYears: 3,
+  },
+  MOON_LANDING: {
+    activeStationIds: ['goldstone', 'madrid', 'canberra', 'lunar-relay'],
+    bandId: 'X_BAND',
+    plannedLifetimeYears: 1,
+  },
+  MARS_LANDING: {
+    activeStationIds: ['goldstone', 'madrid', 'canberra', 'lunar-relay'],
+    bandId: 'X_BAND',
+    plannedLifetimeYears: 3,
+  },
+};
