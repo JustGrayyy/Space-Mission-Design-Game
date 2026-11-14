@@ -13,14 +13,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Layer | Directory | Responsibility |
 |-------|-----------|----------------|
 | **Types** | `src/core/types.ts` | All TypeScript interfaces: `GamePhase`, `MissionId`, `SpacecraftConfig`, `FlightState`, `ResourceKey`, subsystem specs, validation results, debrief reports |
-| **Constants & Data** | `src/core/constants.ts` | Mission specs, spacecraft parts catalog (7 subsystems × 3 tiers), launch vehicles (3), DSN ground stations (6), comms bands (3), recommended loadouts per mission |
-| **Physics Engine** | `src/core/physicsEngine.ts` | Orbital mechanics (Velocity-Verlet), gravity (Earth/Moon/Mars SOI), atmospheric drag (Earth/Mars), eclipses, power, science generation, DSN line-of-sight, stage separation, landing logic |
-| **Spacecraft Validator** | `src/core/spacecraftValidator.ts` | 30+ conflict checks: mass/Δv, power/battery, computer bus/rad-hard, ADCS pointing tier, thermal/heatshield, payload match, TWR, budget, schedule |
+| **Constants & Data** | `src/core/constants.ts` | Mission specs, spacecraft parts catalog (7 subsystems × 4 tiers incl. Tier 4), launch vehicles (5), DSN ground stations (6), comms bands (3), recommended loadouts per mission |
+| **Physics Engine** | `src/core/physicsEngine.ts` | Orbital mechanics (Velocity-Verlet), gravity (Earth/Moon/Mars SOI), atmospheric drag (Earth/Mars), eclipses, power, science generation, DSN line-of-sight, stage separation, landing logic, auto time-warp step-down |
+| **Spacecraft Validator** | `src/core/spacecraftValidator.ts` | 30+ conflict checks: mass/Δv, power/battery, computer bus/rad-hard, ADCS pointing tier, thermal/heatshield, payload match, TWR, budget, schedule, Tier 4 parts |
 | **Ground Segment** | `src/core/groundSegment.ts` | Contact coverage calculation, downlink vs. science generation, buffer overflow risk, total campaign cost/schedule |
 | **Debrief Analyzer** | `src/core/debriefAnalyzer.ts` | Post-flight resource-by-resource assessment (mass, power, budget, data, comms, time) with beginner/realistic notes |
 | **State Store** | `src/store/useMissionStore.ts` | Zustand store managing all game phases, spacecraft config, ground config, flight state, flight controls, debrief |
 | **3D Scenes** | `src/three/scenes/` | `SceneController` interface + 4 implementations: `SolarSelectScene` (title/objective select), `HangarScene` (VAB), `GroundGlobeScene` (DSN config), `FlightScene` (real-time flight) |
-| **Procedural Assets** | `src/three/meshes/ProceduralAssets.ts` | Geometry generators for rockets, planets, exhaust plumes, cones, orbit lines, starfields |
+| **Procedural Assets** | `src/three/meshes/ProceduralAssets.ts` | Geometry generators for rockets, planets, exhaust plumes, particle systems, cones, orbit lines, starfields |
 | **HUD Components** | `src/hud/` | `PhaseHudOverlay.tsx` (5 phase UIs), `TopResourceStrip.tsx`, `KapCommsBubble.tsx` |
 
 ### Game Phase Flow
@@ -36,7 +36,7 @@ TITLE → OBJECTIVE_SELECT → HANGAR → GROUND_SEGMENT → FLIGHT → DEBRIEF
 - **FLIGHT**: Real-time 3D sim with autopilot (BEGINNER) or manual (REALISTIC); throttle, staging, time warp 1–500x; chase camera
 - **DEBRIEF**: 6-resource scorecard with OPTIMAL/WARNING/CRITICAL status, beginner tips, realistic telemetry
 
-## Common Development Commands
+## Commands
 
 ```bash
 # Development

@@ -58,7 +58,8 @@ export const PhaseHudOverlay: React.FC = () => {
   const setDifficulty = useMissionStore((s) => s.setDifficulty);
   const selectTopObjective = useMissionStore((s) => s.selectTopObjective);
   const selectExploreSubMission = useMissionStore((s) => s.selectExploreSubMission);
-  const enterHangar = useMissionStore((s) => s.enterHangar);
+  const requestEnterHangar = useMissionStore((s) => s.requestEnterHangar);
+  const openTutorial = useMissionStore((s) => s.openTutorial);
   const setActiveSnapCategory = useMissionStore((s) => s.setActiveSnapCategory);
   const equipPart = useMissionStore((s) => s.equipPart);
   const applyRecommendedLoadout = useMissionStore((s) => s.applyRecommendedLoadout);
@@ -229,7 +230,7 @@ export const PhaseHudOverlay: React.FC = () => {
             type="button"
             data-testid="enter-hangar-btn"
             className="primary-cta-btn full-w"
-            onClick={enterHangar}
+            onClick={requestEnterHangar}
           >
             ENTER VAB HANGAR
           </button>
@@ -284,6 +285,15 @@ export const PhaseHudOverlay: React.FC = () => {
             <span>PAD TWR: {val.mass.padTwr.toFixed(2)}</span>
             <span>TOTAL Δv: {Math.round(val.mass.totalDeltaVMs)} m/s</span>
           </div>
+
+          <button
+            type="button"
+            data-testid="open-guide-btn"
+            className="secondary-hud-btn guide-btn"
+            onClick={openTutorial}
+          >
+            📖 HOW TO WIN GUIDE
+          </button>
 
           <button
             type="button"

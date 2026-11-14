@@ -75,6 +75,8 @@ test.describe('Orbital Architect 3D End-to-End Campaign', () => {
     await expect(page.getByTestId('objective-select-hud')).toContainText('Earth Climate');
 
     await page.getByTestId('enter-hangar-btn').click();
+    await expect(page.getByTestId('tutorial-overlay')).toBeVisible();
+    await page.getByTestId('tutorial-ack-btn').click();
     await expect(page.getByTestId('hangar-hud')).toBeVisible();
 
     // 4. Phase 2: Hangar deliberate conflict detection -> Kap ALERT -> Auto-Engineer -> HAPPY

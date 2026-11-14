@@ -1106,8 +1106,403 @@ body,
   font-size: 10.5px;
 }
 
-.debrief-actions {
+/* --- TUTORIAL & HOW-TO-WIN MODAL (POPUP WITH ANIMATION) --- */
+@keyframes backdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes popupSpring {
+  0% {
+    opacity: 0;
+    transform: scale(0.88) translateY(24px);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.015) translateY(-3px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(16, 185, 129, 0.85);
+  }
+}
+
+.tutorial-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(2, 6, 18, 0.78);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: backdropFadeIn 0.22s ease-out forwards;
+}
+
+.tutorial-modal-card {
+  width: min(840px, calc(100vw - 36px));
+  max-height: calc(100vh - 48px);
+  background: rgba(8, 16, 34, 0.94);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75), 0 0 24px rgba(56, 189, 248, 0.22);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popupSpring 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.tutorial-modal-header {
+  padding: 16px 20px 12px 20px;
+  background: rgba(15, 28, 54, 0.75);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.tutorial-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.tutorial-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #38bdf8;
+}
+
+.tutorial-mission-pill {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid;
+}
+
+.tutorial-title {
+  margin: 0 0 10px 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1.35;
+}
+
+.tutorial-tab-row {
+  display: flex;
+  gap: 8px;
+}
+
+.tutorial-tab-btn {
+  background: rgba(15, 28, 52, 0.8);
+  border: 1px solid rgba(100, 116, 139, 0.45);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tutorial-tab-btn.active {
+  background: rgba(2, 132, 199, 0.35);
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.tutorial-modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  max-height: calc(100vh - 220px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Blueprint Grid */
+.tutorial-blueprint-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tutorial-concept-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.banner-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.banner-text {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #e0f2fe;
+}
+
+.banner-text strong {
+  color: #38bdf8;
+}
+
+.tutorial-danger-box {
+  background: rgba(127, 29, 29, 0.28);
+  border: 1px solid rgba(239, 68, 68, 0.65);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.danger-title {
+  font-size: 11px;
+  font-weight: 900;
+  color: #f87171;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.danger-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.danger-card {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.danger-card-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #fca5a5;
+  margin-bottom: 3px;
+}
+
+.danger-card-body {
+  font-size: 10.5px;
+  color: #f1f5f9;
+  line-height: 1.35;
+}
+
+/* Specs Table */
+.tutorial-spec-table {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.spec-table-header {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #7dd3fc;
+  background: rgba(15, 28, 54, 0.9);
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.spec-row {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.1);
+  font-size: 11px;
+  align-items: center;
+}
+
+.spec-row:last-child {
+  border-bottom: none;
+}
+
+.spec-row:nth-child(even) {
+  background: rgba(15, 28, 52, 0.35);
+}
+
+.spec-row.highlight-row {
+  background: rgba(14, 165, 233, 0.15);
+}
+
+.spec-col-label {
+  font-weight: 800;
+  color: #93c5fd;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+}
+
+.spec-col-val {
+  color: #f1f5f9;
+  line-height: 1.35;
+}
+
+/* Concepts 101 Grid */
+.tutorial-concepts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.concept-card {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.concept-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.concept-emoji {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.concept-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.concept-sub {
+  font-size: 10px;
+  color: #7dd3fc;
+  font-weight: 600;
+}
+
+.concept-body {
+  margin: 0;
+  font-size: 11px;
+  color: #cbd5e1;
+  line-height: 1.45;
+}
+
+/* Rules List */
+.tutorial-rules-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.rule-card {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.rule-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.rule-num {
+  width: 20px;
+  height: 20px;
+  background: #0284c7;
+  color: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.rule-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #7dd3fc;
+  letter-spacing: 0.05em;
+}
+
+.rule-body {
+  margin: 0;
+  font-size: 11.5px;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+/* Kap tip */
+.tutorial-kap-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.kap-tip-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.kap-tip-text {
+  font-size: 11px;
+  color: #e0f2fe;
+  line-height: 1.4;
+}
+
+.kap-tip-text strong {
+  color: #38bdf8;
+}
+
+/* Modal Footer */
+.tutorial-modal-footer {
+  padding: 14px 20px;
+  background: rgba(15, 28, 54, 0.75);
+  border-top: 1px solid rgba(56, 189, 248, 0.25);
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 12px;
+}
+
+.pulse-btn {
+  animation: pulseGlow 2.2s infinite ease-in-out;
+  padding: 12px 22px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.guide-btn {
+  background: rgba(14, 165, 233, 0.25);
+  border-color: #38bdf8;
+  color: #e0f2fe;
+}
+
+.guide-btn:hover {
+  background: rgba(14, 165, 233, 0.45);
 }
