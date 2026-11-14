@@ -1,0 +1,82 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="moonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e1e24;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#2d2d3a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e1e24;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="lunarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e2e8f0;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#94a3b8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#64748b;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#facc15;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#facc15;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="url(#moonGrad)" stroke="#94a3b8" stroke-width="3"/>
+  <!-- Stars -->
+  <g fill="#ffffff" opacity="0.7">
+    <circle cx="50" cy="40" r="1"/><circle cx="210" cy="35" r="0.8"/><circle cx="30" cy="190" r="1.2"/>
+    <circle cx="230" cy="210" r="0.6"/><circle cx="80" cy="230" r="1"/><circle cx="200" cy="80" r="0.8"/>
+  </g>
+  <!-- Moon surface -->
+  <ellipse cx="128" cy="160" rx="100" ry="40" fill="url(#lunarGrad)"/>
+  <ellipse cx="128" cy="155" rx="95" ry="35" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,4"/>
+  <!-- Craters -->
+  <g fill="#1e1e24" opacity="0.5">
+    <ellipse cx="80" cy="155" rx="18" ry="10"/>
+    <ellipse cx="180" cy="165" rx="14" ry="8"/>
+    <ellipse cx="110" cy="175" rx="10" ry="6"/>
+    <ellipse cx="160" cy="145" rx="8" ry="5"/>
+  </g>
+  <!-- Lander -->
+  <g transform="translate(128, 100)">
+    <!-- Descent stage -->
+    <ellipse cx="0" cy="20" rx="30" ry="8" fill="#cbd5e1" stroke="#f59e0b" stroke-width="2"/>
+    <rect x="-28" y="16" width="56" height="20" fill="#94a3b8" stroke="#f59e0b" stroke-width="1.5"/>
+    <!-- Landing legs (4) -->
+    <g stroke="#f59e0b" stroke-width="3" stroke-linecap="round" fill="none">
+      <path d="M -35 30 Q -50 55 -50 70"/>
+      <path d="M 35 30 Q 50 55 50 70"/>
+      <path d="M -20 30 Q -15 55 -5 70"/>
+      <path d="M 20 30 Q 15 55 5 70"/>
+    </g>
+    <!-- Leg pads -->
+    <g fill="#f59e0b">
+      <ellipse cx="-50" cy="72" rx="8" ry="3"/>
+      <ellipse cx="50" cy="72" rx="8" ry="3"/>
+      <ellipse cx="-5" cy="72" rx="8" ry="3"/>
+      <ellipse cx="5" cy="72" rx="8" ry="3"/>
+    </g>
+    <!-- Ascent stage -->
+    <rect x="-18" y="-20" width="36" height="40" rx="4" fill="#cbd5e1" stroke="#f59e0b" stroke-width="2"/>
+    <rect x="-14" y="-16" width="28" height="32" rx="2" fill="#94a3b8"/>
+    <!-- RCS thrusters -->
+    <g fill="#f59e0b">
+      <rect x="-18" y="-10" width="6" height="4" rx="1"/>
+      <rect x="12" y="-10" width="6" height="4" rx="1"/>
+      <rect x="-18" y="10" width="6" height="4" rx="1"/>
+      <rect x="12" y="10" width="6" height="4" rx="1"/>
+    </g>
+    <!-- Cockpit window -->
+    <ellipse cx="0" cy="-10" rx="8" ry="6" fill="#38bdf8" opacity="0.6" stroke="#22d3ee" stroke-width="1.5"/>
+    <!-- Antenna -->
+    <line x1="0" y1="-20" x2="0" y2="-35" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="0" cy="-37" r="5" fill="#f59e0b" stroke="#facc15" stroke-width="1.5"/>
+    <!-- Flag -->
+    <path d="M 20 0 L 20 -18" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+    <rect x="20" y="-18" width="18" height="12" fill="#f59e0b" transform="rotate(-10 20 -12)"/>
+  </g>
+  <!-- Orbital ring -->
+  <ellipse cx="128" cy="128" rx="100" ry="30" fill="none" stroke="#f59e0b" stroke-width="2" opacity="0.6" stroke-dasharray="10,8"/>
+  <!-- Earth in distance -->
+  <circle cx="200" cy="40" r="18" fill="#0a3366" stroke="#38bdf8" stroke-width="1.5"/>
+  <ellipse cx="200" cy="40" rx="12" ry="12" fill="#267847" opacity="0.6"/>
+  <!-- Mission text -->
+  <text x="128" y="220" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#fef3c7" letter-spacing="1.5">MOON LANDING</text>
+  <text x="128" y="235" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" font-weight="500" fill="#fde68a">ARTEMIS POLAR PROSPECTOR</text>
+</svg>

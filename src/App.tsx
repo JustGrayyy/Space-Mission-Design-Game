@@ -1,6 +1,7 @@
 import React from 'react';
 import { KapCommsBubble } from './hud/KapCommsBubble';
 import { PhaseHudOverlay } from './hud/PhaseHudOverlay';
+import { RobotAssistant } from './hud/RobotAssistant';
 import { TopResourceStrip } from './hud/TopResourceStrip';
 import { TutorialOverlay } from './hud/TutorialOverlay';
 import { Viewport3D } from './three/Viewport3D';
@@ -12,6 +13,7 @@ export const App: React.FC = () => {
       <TopResourceStrip />
       <KapCommsBubble />
       <TutorialOverlay />
+      <RobotAssistant />
       <PhaseHudOverlay />
     </main>
   );

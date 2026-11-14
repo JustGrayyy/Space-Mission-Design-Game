@@ -1604,3 +1604,236 @@ body,
 .guide-btn:hover {
   background: rgba(14, 165, 233, 0.45);
 }
+
+/* --- ROBOT ASSISTANT --- */
+.robot-assistant {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  max-width: 420px;
+  pointer-events: auto;
+  animation: slideInFromRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.robot-assistant.minimized {
+  max-width: 80px;
+}
+
+/* Robot avatar */
+.robot-avatar {
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 2px solid rgba(56, 189, 248, 0.5);
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.robot-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: robotBob 2s ease-in-out infinite;
+}
+
+@keyframes robotBob {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Minimized avatar */
+.robot-avatar-mini {
+  width: 60px;
+  height: 60px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 2px solid rgba(56, 189, 248, 0.5);
+  border-radius: 12px;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.robot-avatar-mini:hover {
+  border-color: #38bdf8;
+  transform: scale(1.05);
+}
+
+.robot-image-mini {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Toggle button */
+.robot-toggle-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 4px;
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: all 0.2s ease;
+}
+
+.robot-toggle-btn:hover {
+  background: rgba(14, 165, 233, 0.3);
+  border-color: #38bdf8;
+  color: #e0f2fe;
+}
+
+/* Hint bubble */
+.robot-bubble {
+  flex: 1;
+  background: rgba(15, 23, 42, 0.95);
+  border: 2px solid rgba(56, 189, 248, 0.5);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  animation: bubblePop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes bubblePop {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.robot-bubble-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.robot-name {
+  font-size: 11px;
+  font-weight: 800;
+  color: #7dd3fc;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.robot-phase-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  background: rgba(14, 165, 233, 0.3);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  border-radius: 4px;
+  color: #e0f2fe;
+  letter-spacing: 0.05em;
+}
+
+.robot-message {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.robot-priority-indicator {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fecaca;
+  text-align: center;
+  animation: criticalPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes criticalPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* Priority-based styling */
+.robot-assistant.priority-critical .robot-bubble {
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+.robot-assistant.priority-critical .robot-avatar {
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+.robot-assistant.priority-high .robot-bubble {
+  border-color: rgba(251, 146, 60, 0.7);
+}
+
+.robot-assistant.priority-high .robot-avatar {
+  border-color: rgba(251, 146, 60, 0.7);
+}
+
+.robot-assistant.priority-low .robot-bubble {
+  border-color: rgba(34, 197, 94, 0.7);
+}
+
+.robot-assistant.priority-low .robot-avatar {
+  border-color: rgba(34, 197, 94, 0.7);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .robot-assistant {
+    right: 10px;
+    bottom: 10px;
+    max-width: 320px;
+  }
+
+  .robot-avatar {
+    width: 60px;
+    height: 60px;
+  }
+
+  .robot-message {
+    font-size: 12px;
+  }
+}
