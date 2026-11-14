@@ -2,52 +2,186 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What this folder is
+## Project Overview
 
-A NASA Space Apps Challenge entry — "Space Mission Design Game" — titled **Orbital Architect 3D**. A single-player space mission design and flight simulation game where the player picks a mission objective, assembles a spacecraft and ground segment, flies the mission in real-time 3D, and receives a post-mission debrief grading engineering trade-offs.
+**Orbital Architect 3D** — A NASA Space Apps-inspired space mission design game built with React + Three.js + TypeScript. Players design spacecraft, configure ground stations, and fly real-time 3D orbital simulations across 4 mission types: Earth Observation (LEO), Space Telescope (1,800 km HEO), Moon Landing, and Mars Landing.
+
+## Architecture
+
+### Core Layers
+
+| Layer | Directory | Responsibility |
+|-------|-----------|----------------|
+| **Types** | `src/core/types.ts` | All TypeScript interfaces: `GamePhase`, `MissionId`, `SpacecraftConfig`, `FlightState`, `ResourceKey`, subsystem specs, validation results, debrief reports |
+| **Constants & Data** | `src/core/constants.ts` | Mission specs, spacecraft parts catalog (7 subsystems × 4 tiers incl. Tier 4), launch vehicles (5), DSN ground stations (6), comms bands (3), recommended loadouts per mission |
+| **Physics Engine** | `src/core/physicsEngine.ts` | Orbital mechanics (Velocity-Verlet), gravity (Earth/Moon/Mars SOI), atmospheric drag (Earth/Mars), eclipses, power, science generation, DSN line-of-sight, stage separation, landing logic, auto time-warp step-down |
+| **Spacecraft Validator** | `src/core/spacecraftValidator.ts` | 30+ conflict checks: mass/Δv, power/battery, computer bus/rad-hard, ADCS pointing tier, thermal/heatshield, payload match, TWR, budget, schedule, Tier 4 parts |
+| **Ground Segment** | `src/core/groundSegment.ts` | Contact coverage calculation, downlink vs. science generation, buffer overflow risk, total campaign cost/schedule |
+| **Debrief Analyzer** | `src/core/debriefAnalyzer.ts` | Post-flight resource-by-resource assessment (mass, power, budget, data, comms, time) with beginner/realistic notes |
+| **State Store** | `src/store/useMissionStore.ts` | Zustand store managing all game phases, spacecraft config, ground config, flight state, flight controls, debrief |
+| **3D Scenes** | `src/three/scenes/` | `SceneController` interface + 4 implementations: `SolarSelectScene` (title/objective select), `HangarScene` (VAB), `GroundGlobeScene` (DSN config), `FlightScene` (real-time flight) |
+| **Procedural Assets** | `src/three/meshes/ProceduralAssets.ts` | Geometry generators for rockets, planets, exhaust plumes, particle systems, cones, orbit lines, starfields |
+| **HUD Components** | `src/hud/` | `PhaseHudOverlay.tsx` (5 phase UIs), `TopResourceStrip.tsx`, `KapCommsBubble.tsx` |
+
+### Game Phase Flow
+
+```
+TITLE → OBJECTIVE_SELECT → HANGAR → GROUND_SEGMENT → FLIGHT → DEBRIEF
+                              ↑_______________________| (restart or return)
+```
+
+- **OBJECTIVE_SELECT**: Choose Moon Landing, Mars Landing, or Explore Space (→ Earth Obs or Space Telescope)
+- **HANGAR**: Drag-drop 7 subsystem slots + launcher; Kap auto-engineer applies recommended loadout; validation runs live
+- **GROUND_SEGMENT**: Toggle 6 DSN stations, pick comms band (S/X/Ka-Band), set ops lifetime (1/3/5 yr); greenlight requires zero CRITICAL conflicts
+- **FLIGHT**: Real-time 3D sim with autopilot (BEGINNER) or manual (REALISTIC); throttle, staging, time warp 1–500x; chase camera
+- **DEBRIEF**: 6-resource scorecard with OPTIMAL/WARNING/CRITICAL status, beginner tips, realistic telemetry
 
 ## Commands
 
-All run from the repo root:
-
 ```bash
-npm install            # install dependencies
-npm run dev            # Vite dev server on :5173 (Playwright e2e uses this)
-npm run build          # tsc -b then vite build -> dist/
-npm run test           # vitest run (unit tests, src/**/*.test.ts)
-npm run test:e2e       # Playwright test (runs dev server, full campaign flow)
-npx tsc --noEmit       # typecheck only
+# Development
+npm run dev          # Start Vite dev server on port 5173
+npm run build        # TypeScript build + Vite production build
+npm run preview      # Preview production build on port 4173
+npm run typecheck    # TypeScript compile check (no emit)
+
+# Testing
+npm run test         # Run all Vitest unit tests once
+npm run test:watch   # Vitest watch mode
+npm run test:e2e     # Playwright E2E tests
 ```
 
-Run a single test file: `npx vitest run src/core/__tests__/spacecraftValidator.test.ts`
+### Running a Single Test
 
-## High-level architecture
+```bash
+# Unit test file
+npx vitest run src/core/__tests__/physicsEngine.test.ts
 
-The app is one page (`index.html` -> `src/main.tsx` -> `src/App.tsx`). All game state lives in a single Zustand store at `src/store/useMissionStore.ts`; UI reads from it via selectors and mutates it via exported actions.
+# Single test by name
+npx vitest run -t "maintains circular orbit stability"
+```
 
-Game phases (store field `phase`, type `GamePhase`): `TITLE` -> `OBJECTIVE_SELECT` -> `HANGAR` -> `GROUND_SEGMENT` -> `FLIGHT` -> `DEBRIEF`.
+## Key Data Structures
 
-**Data layer** — `src/core/constants.ts` defines all gameplay data: `MISSIONS` (4 mission specs with Δv target, budget cap, schedule, science target, subsystem requirements), `SPACECRAFT_PARTS` (21 parts across structure/power/battery/computer/adcs/thermal/payload), `LAUNCH_VEHICLES` (3 vehicles with 2-stage params), `GROUND_STATIONS` (DSN sites + lunar relay), `COMMS_BANDS` (S/X/Ka), recommended loadouts, and physical constants (Earth μ/radius/atmosphere, Moon/Mars SOI, etc.). The two difficulty modes (`BEGINNER` vs `REALISTIC`) only change flight assist on/off and plain-English vs engineering message tone — physics is identical.
+### SpacecraftConfig (7 subsystems + launcher)
+```typescript
+{
+  structureId, powerId, batteryId, computerId, adcsId, thermalId, payloadId, launcherId
+}
+```
 
-**Validation** — `src/core/spacecraftValidator.ts` runs at build time (hangar + ground segment). Computes mass, 2-stage Tsiolkovsky Δv, pad TWR, power budget, battery eclipse endurance, data bus throughput, ADCS pointing tier, thermal/heat-shield fit, payload-mission match, budget and schedule caps. Emits `EngineeringConflict[]` with beginner and realistic messages; `isLaunchable` requires zero critical conflicts.
+### Validation Result (SpacecraftValidation)
+```typescript
+{
+  isComplete, isLaunchable, kapMood, kapHeadline, conflicts[],
+  mass: { spacecraftDryKg, padTwr, totalDeltaVMs, ... },
+  power: { sunlitGenerationW, totalDrawW, batteryWh, requiredEclipseWh, ... },
+  data: { payloadDataRateMbps, cpuMaxMbps, storageMaxMb },
+  budget: { craftCostM, launcherCostM, totalCraftAndLauncherM },
+  schedule: { buildMonths }
+}
+```
 
-**Ground segment** — `src/core/groundSegment.ts` computes DSN contact coverage, downlink capacity vs. science generation per orbit, buffer-overflow risk, campaign cost/schedule, and `canGreenlight`.
+### FlightState (real-time simulation)
+```typescript
+{
+  position, velocity, heading, throttle, activeStageIndex,
+  stage1PropKg, stage2PropKg, batteryWh, batteryMaxWh,
+  onboardDataMb, storageMaxMb, deliveredDataMb, droppedDataMb,
+  observationProgress, targetAchieved, elapsedFlightSec, timeWarp,
+  flightAssistEnabled, status, failureReason, inEclipse,
+  activeDsnStationIds, currentPowerGenW, currentPowerDrawW,
+  deltaVRemainingMs, deltaVExpendedMs, orbitalElements, targetPhaseStatus, events[]
+}
+```
 
-**Flight simulation** — `src/core/physicsEngine.ts` runs inside the rAF loop via `tickFlight`. Velocity-Verlet integration with Earth/Moon/Mars gravity, atmospheric drag & Max Q, eclipse shadow, staging, pad TWR pin-check, suicide-burn landing, science observation + DSN downlink, and success/failure determination. `src/core/debriefAnalyzer.ts` produces the post-mission `DebriefReport` grading 6 resources (mass, power, budget, data, comms, time).
+## Important Physics Constants (Scaled for Gameplay)
 
-**Rendering** — `src/Viewport3D.tsx` owns the Three.js renderer, camera, input listeners, and rAF loop. It swaps a `SceneController` per phase:
-- `SolarSelectScene` — title + objective-select 3D (Earth/Moon/Mars beacons)
-- `HangarScene` — VAB rocket stack assembly with drag-to-equip parts
-- `GroundGlobeScene` — Earth with clickable DSN dishes + target orbit ring
-- `FlightScene` — planets, spacecraft, exhaust plume, DSN beams, orbit trajectory lines
+```typescript
+EARTH_RADIUS_M = 600_000           // 600 km (vs real 6,371 km)
+EARTH_MU = 3.84e12                 // Scaled μ
+EARTH_ATM_TOP_M = 80_000           // 80 km atmosphere
+MOON_ORBIT_M = 3_200_000           // 3,200 km
+MARS_TRANSFER_M = 6_500_000        // 6,500 km
+EARTH_ROT_RATE = 2π / 1800         // 30-min scaled Earth day
+WORLD_SCALE = 1 / 10_000           // Three.js units (1 unit = 10 km)
+```
 
-**UI layer** — `src/hud/` holds `PhaseHudOverlay.tsx` (per-phase HUD: title, objective select, hangar part chips, ground segment console, flight instruments, debrief grid), `TopResourceStrip.tsx` (6 resource gauges), and `KapCommsBubble.tsx` (the KAP flight-engineer avatar showing the top engineering conflict). Styles are custom CSS in `src/index.css` (no Tailwind, no UI component library).
+## Validation Conflict Categories
 
-**Tests** — unit tests in `src/core/__tests__/` (vitest). E2E campaign test at `e2e/missionFlow.spec.ts` (Playwright, drives the full 5-phase flow against the dev server).
+| Category | Typical CRITICAL Checks |
+|----------|------------------------|
+| **structure** | Payload overload, missing landing legs (Tier < 2) |
+| **power** | Sunlit deficit, low margin (<15%) |
+| **battery** | Eclipse blackout, tight DoD (>80%) |
+| **computer** | Bus bottleneck, non-rad-hard in deep space |
+| **adcs** | Magnetorquers beyond LEO, pointing tier insufficient |
+| **thermal** | Missing heatshield (Mars), thermal tier too low |
+| **payload** | Mission mismatch |
+| **launcher** | TWR < 1.05, Δv shortfall vs mission target |
+| **budget** | Craft+launcher > cap, total campaign > cap |
+| **schedule** | Build months > launch window |
 
-## Constraints / notes
+## Flight Phase State Machine (PhysicsEngine)
 
-- The `dist/` folder is a prebuilt artifact; do not edit it directly — rebuild via `npm run build`.
-- Multiplayer is a disabled stub (`MULTIPLAYER (LOCKED — COMING SOON)`); the challenge supports up to 4 participants but only single-player is implemented.
-- No NASA data is fetched at runtime — all physical constants are hardcoded in `constants.ts` and sourced from NASA references documented in `project-tala-research.md`. Incorporating a live NASA resource (e.g., LSP performance curves or JPL planetary data) is the primary outstanding NASA-compliance gap.
-- The repo root's separate `CLAUDE.md` (in the parent college workspace) describes an unrelated `birthday-serenade` app and does not apply here.
+```
+PRELAUNCH → ASCENT → ORBIT → [TRANSIT → TARGET_CAPTURE → LANDING] → SUCCESS
+                ↓                                                         ↓
+              FAILED ←────────────── (impact, blackout, burn-up, decay) ←
+```
+
+- **EARTH_OBSERVATION**: Target achieved in ORBIT at 150 km
+- **SPACE_TELESCOPE**: ORBIT → TRANSIT (Hohmann to 1,800 km) → ORBIT → SUCCESS
+- **MOON_LANDING**: ORBIT → TRANSIT (TLI) → TARGET_CAPTURE → LANDING → SUCCESS
+- **MARS_LANDING**: ORBIT → TRANSIT (TMI) → TARGET_CAPTURE → LANDING → SUCCESS
+
+## Flight Controls (REALISTIC Mode)
+
+| Key | Action |
+|-----|--------|
+| W/S / ↑/↓ | Pitch |
+| A/D / ←/→ | Yaw |
+| Z / Shift | Throttle +15% |
+| X / Ctrl | Throttle -15% |
+| Space | Stage separation |
+| 1–5 | Time warp (1×, 5×, 25×, 100×, 500×) |
+
+## Testing Strategy
+
+- **Unit tests** (`src/core/__tests__/*.test.ts`): Physics engine orbital mechanics, spacecraft validator conflict rules, Tsiolkovsky Δv math, eclipse geometry, DSN visibility
+- **E2E tests** (`e2e/`): Playwright browser automation for full phase flows
+- **No component/integration tests** for React/Three.js — visual correctness verified manually via `npm run dev`
+
+## Common Patterns
+
+### Adding a New Spacecraft Part
+1. Add entry to `SPACECRAFT_PARTS` in `constants.ts` with all required fields
+2. Update `RECOMMENDED_LOADOUTS` if it belongs in a default mission
+3. Add validation logic in `spacecraftValidator.ts` if it introduces new conflict types
+4. Add mesh generation in `ProceduralAssets.ts` if visual distinct
+
+### Adding a New Mission
+1. Add `MissionSpec` to `MISSIONS` in `constants.ts`
+2. Add `RECOMMENDED_LOADOUTS` and `RECOMMENDED_GROUND` entries
+3. Add target type handling in `physicsEngine.ts` (flight phase logic, science collection conditions)
+4. Add debrief metrics in `debriefAnalyzer.ts`
+
+### Hot Module Replacement Notes
+- Zustand store persists via `window.__MISSION_STORE__` reference
+- Three.js scenes dispose on phase change via `SceneController.dispose()`
+- Canvas renderer created once in `Viewport3D.tsx` useEffect (empty deps)
+
+## Performance Notes
+
+- Physics runs at max 0.25s sub-steps for numerical stability at 500× warp
+- 3D scene rebuilds only when spacecraft config signature changes (`JSON.stringify` comparison)
+- DSN visuals pooled (preallocated 6 station meshes, reused via Map)
+- Orbit trajectory line uses persistent `Float32Array` buffer with `setDrawRange`
+- Battery/power calculations use Wh and W consistently; eclipse energy = drainW × durationSec / 3600
+
+## File Naming Conventions
+
+- Core logic: `camelCase.ts` (e.g., `physicsEngine.ts`, `spacecraftValidator.ts`)
+- React components: `PascalCase.tsx` (e.g., `PhaseHudOverlay.tsx`)
+- Three.js scenes: `PascalCase.ts` + `Scene` suffix (e.g., `FlightScene.ts`)
+- Tests: `*.test.ts` alongside source or in `__tests__` folder

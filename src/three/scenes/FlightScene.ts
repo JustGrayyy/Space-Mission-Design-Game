@@ -19,8 +19,10 @@ import {
   getMoonState,
   vecLen,
   vecSub,
+  vecAdd,
+  vecScale,
 } from '../../core/physicsEngine';
-import type { SubsystemCategory, Vec3 } from '../../core/types';
+import type { SubsystemCategory, Vec3, FlightState } from '../../core/types';
 import { useMissionStore } from '../../store/useMissionStore';
 import {
   createConeBeam,
@@ -57,6 +59,8 @@ interface PooledDsnVisual {
 }
 
 const ORBIT_SEGMENTS = 96;
+const DESCENT_LINE_SEGMENTS = 64;
+const LANDING_TARGET_MARKER_RADIUS = 1.5;
 
 export class FlightScene implements SceneController {
   private scene!: THREE.Scene;
@@ -81,6 +85,11 @@ export class FlightScene implements SceneController {
   private earthShadow!: THREE.Mesh;
   private moonShadow!: THREE.Mesh;
   private marsShadow!: THREE.Mesh;
+
+  // Descent trajectory line and landing target marker
+  private descentLine!: THREE.Line;
+  private descentPositions = new Float32Array((DESCENT_LINE_SEGMENTS + 1) * 3);
+  private descentTargetMarker!: THREE.Mesh;
 
   private dsnConesGroup = new THREE.Group();
   private downlinkLinesGroup = new THREE.Group();
@@ -181,7 +190,28 @@ export class FlightScene implements SceneController {
       new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.72 })
     );
     this.orbitLine.frustumCulled = false;
+    this.orbitLine.renderOrder = 2; // Above atmosphere halos (renderOrder 1)
     this.root.add(this.orbitLine);
+
+    // Preallocate descent trajectory line
+    const descentGeom = new THREE.BufferGeometry();
+    descentGeom.setAttribute('position', new THREE.BufferAttribute(this.descentPositions, 3));
+    descentGeom.setDrawRange(0, 0);
+    this.descentLine = new THREE.Line(
+      descentGeom,
+      new THREE.LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.75 })
+    );
+    this.descentLine.frustumCulled = false;
+    this.descentLine.renderOrder = 2;
+    this.root.add(this.descentLine);
+
+    // Preallocate landing target marker
+    this.descentTargetMarker = new THREE.Mesh(
+      new THREE.SphereGeometry(LANDING_TARGET_MARKER_RADIUS, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.9 })
+    );
+    this.descentTargetMarker.visible = false;
+    this.root.add(this.descentTargetMarker);
 
     // Preallocate DSN station dots, cones, and beams
     const dotGeom = new THREE.SphereGeometry(0.95, 8, 8);
@@ -275,6 +305,82 @@ export class FlightScene implements SceneController {
       rotAxis: new THREE.Vector3(0.7, 0.2, 0.6).normalize(),
       age: 0,
     });
+  }
+
+  private updateDescentTrajectory(flight: FlightState, isMoon: boolean): void {
+    // Reset descent line
+    this.descentLine.geometry.setDrawRange(0, 0);
+    this.descentTargetMarker.visible = false;
+
+    // Get target body state
+    const moonState = getMoonState(flight.elapsedFlightSec);
+    const marsState = getMarsState(flight.elapsedFlightSec);
+    const targetBodyCenterM = isMoon ? moonState.pos : marsState.pos;
+    const targetBodyVelM = isMoon ? moonState.vel : marsState.vel;
+    const mu = isMoon ? MOON_MU : MARS_MU;
+    const radius = isMoon ? MOON_RADIUS_M : MARS_RADIUS_M;
+
+    // Compute relative position and velocity to target body
+    const relPos = vecSub(flight.position, targetBodyCenterM);
+    const relVel = vecSub(flight.velocity, targetBodyVelM);
+
+    // Simple ballistic trajectory preview: project current state forward under gravity only
+    let pos = relPos;
+    let vel = relVel;
+    const positionsArr = this.descentPositions as Float32Array;
+    const numSteps = DESCENT_LINE_SEGMENTS;
+    const stepTime = 20; // 20 seconds per step for smooth preview
+
+    // Use current position as first point
+    positionsArr[0] = pos.x;
+    positionsArr[1] = pos.y;
+    positionsArr[2] = pos.z;
+
+    for (let i = 1; i <= numSteps; i++) {
+      // Simple Velocity-Verlet integration
+      const h = stepTime;
+      const halfVel = vecAdd(vel, vecScale({
+        x: -mu * pos.x / Math.pow(vecLen(pos), 3),
+        y: -mu * pos.y / Math.pow(vecLen(pos), 3),
+        z: -mu * pos.z / Math.pow(vecLen(pos), 3)
+      }, 0.5 * h));
+
+      const nextPos = vecAdd(pos, vecScale(halfVel, h));
+      const nextGrav = {
+        x: -mu * nextPos.x / Math.pow(vecLen(nextPos), 3),
+        y: -mu * nextPos.y / Math.pow(vecLen(nextPos), 3),
+        z: -mu * nextPos.z / Math.pow(vecLen(nextPos), 3)
+      };
+      const nextVel = vecAdd(halfVel, vecScale(nextGrav, 0.5 * h));
+
+      positionsArr[i * 3] = nextPos.x;
+      positionsArr[i * 3 + 1] = nextPos.y;
+      positionsArr[i * 3 + 2] = nextPos.z;
+
+      pos = nextPos;
+      vel = nextVel;
+
+      // Stop if we'd hit the surface
+      if (vecLen(pos) < radius * 1.01) {
+        // Fill remaining with surface point
+        for (let j = i + 1; j <= numSteps; j++) {
+          positionsArr[j * 3] = pos.x;
+          positionsArr[j * 3 + 1] = pos.y;
+          positionsArr[j * 3 + 2] = pos.z;
+        }
+        break;
+      }
+    }
+
+    const geom = this.descentLine.geometry;
+    geom.setDrawRange(0, numSteps + 1);
+    const attr = geom.getAttribute('position') as THREE.BufferAttribute;
+    attr.needsUpdate = true;
+
+    // Landing target marker at target surface (projected along velocity)
+    this.descentTargetMarker.visible = true;
+    const targetBodyWorld = isMoon ? this.moon.position : this.mars.position;
+    this.descentTargetMarker.position.copy(targetBodyWorld);
   }
 
   private updateOrbitTrajectory(
@@ -527,7 +633,12 @@ export class FlightScene implements SceneController {
     // Active Keplerian orbit trajectory
     const relMoonDist = vecLen(vecSub(flight.position, moon.pos));
     const relMarsDist = vecLen(vecSub(flight.position, mars.pos));
-    if (state.missionId === 'MOON_LANDING' && relMoonDist < MOON_SOI_M) {
+    const isLandingMission = state.missionId === 'MOON_LANDING' || state.missionId === 'MARS_LANDING';
+    const isMoon = state.missionId === 'MOON_LANDING';
+    const inTargetSOI = (isMoon && relMoonDist < MOON_SOI_M) ||
+                        (!isMoon && relMarsDist < MARS_SOI_M);
+
+    if (isMoon && relMoonDist < MOON_SOI_M) {
       this.updateOrbitTrajectory(
         flight.position,
         flight.velocity,
@@ -536,7 +647,7 @@ export class FlightScene implements SceneController {
         MOON_MU,
         MOON_RADIUS_M
       );
-    } else if (state.missionId === 'MARS_LANDING' && relMarsDist < MARS_SOI_M) {
+    } else if (!isMoon && relMarsDist < MARS_SOI_M) {
       this.updateOrbitTrajectory(
         flight.position,
         flight.velocity,
@@ -554,6 +665,19 @@ export class FlightScene implements SceneController {
         EARTH_MU,
         EARTH_RADIUS_M
       );
+    }
+
+    // Add predicted descent trajectory line during TARGET_CAPTURE and LANDING for landing missions
+    if (isLandingMission && inTargetSOI && (flight.status === 'TARGET_CAPTURE' || flight.status === 'LANDING')) {
+      this.updateDescentTrajectory(flight, isMoon);
+    } else {
+      // Hide descent trajectory when not landing
+      if (this.descentLine) {
+        this.descentLine.geometry.setDrawRange(0, 0);
+      }
+      if (this.descentTargetMarker) {
+        this.descentTargetMarker.visible = false;
+      }
     }
 
     // DSN cones & active green downlink beams
@@ -594,6 +718,93 @@ export class FlightScene implements SceneController {
   }
 
   dispose(): void {
+    // Clean up spent boosters
+    for (const sb of this.spentBoosters) {
+      this.root.remove(sb.mesh);
+      disposeObject3D(sb.mesh);
+    }
+    this.spentBoosters = [];
+
+    // Clean up DSN pool visuals
+    for (const vis of this.dsnPool.values()) {
+      this.dsnConesGroup.remove(vis.dot);
+      this.dsnConesGroup.remove(vis.cone);
+      this.downlinkLinesGroup.remove(vis.beam);
+      disposeObject3D(vis.dot);
+      disposeObject3D(vis.cone);
+      disposeObject3D(vis.beam);
+      vis.dotMat.dispose();
+      vis.coneMat.dispose();
+      vis.beam.geometry.dispose();
+      const beamMat = vis.beam.material;
+      if (Array.isArray(beamMat)) {
+        beamMat.forEach((m) => m.dispose());
+      } else {
+        beamMat.dispose();
+      }
+    }
+    this.dsnPool.clear();
+
+    // Clean up craft visual if not already disposed via root
+    if (this.craftVisual) {
+      this.craftPivot.remove(this.craftVisual);
+      disposeObject3D(this.craftVisual);
+      this.craftVisual = null;
+    }
+
+    // Clean up orbit line
+    this.root.remove(this.orbitLine);
+    this.orbitLine.geometry.dispose();
+    const orbitMat = this.orbitLine.material;
+    if (Array.isArray(orbitMat)) {
+      orbitMat.forEach((m) => m.dispose());
+    } else {
+      orbitMat.dispose();
+    }
+
+    // Clean up AP/PE markers
+    this.root.remove(this.apMarker);
+    this.root.remove(this.peMarker);
+    this.apMarker.geometry.dispose();
+    this.peMarker.geometry.dispose();
+    (this.apMarker.material as THREE.Material).dispose();
+    (this.peMarker.material as THREE.Material).dispose();
+
+    // Clean up sensor cone
+    this.root.remove(this.sensorCone);
+    this.sensorCone.geometry.dispose();
+    (this.sensorCone.material as THREE.Material).dispose();
+
+    // Clean up plume (has its own meshes with materials)
+    if (this.plume) {
+      this.craftPivot.remove(this.plume);
+      disposeObject3D(this.plume);
+    }
+
+    // Clean up descent trajectory line and target marker
+    if (this.descentLine) {
+      this.root.remove(this.descentLine);
+      this.descentLine.geometry.dispose();
+      const descentMat = this.descentLine.material;
+      if (Array.isArray(descentMat)) {
+        descentMat.forEach((m) => m.dispose());
+      } else {
+        descentMat.dispose();
+      }
+    }
+    if (this.descentTargetMarker) {
+      this.root.remove(this.descentTargetMarker);
+      this.descentTargetMarker.geometry.dispose();
+      (this.descentTargetMarker.material as THREE.Material).dispose();
+    }
+
+    // Clean up DSN groups
+    this.root.remove(this.dsnConesGroup);
+    this.root.remove(this.downlinkLinesGroup);
+    disposeObject3D(this.dsnConesGroup);
+    disposeObject3D(this.downlinkLinesGroup);
+
+    // Finally remove and dispose root (planets, shadows, pad tower, starfield, etc.)
     this.scene.remove(this.root);
     disposeObject3D(this.root);
   }

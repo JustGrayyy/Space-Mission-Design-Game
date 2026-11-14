@@ -1,6 +1,97 @@
 import * as THREE from 'three';
 import type { SpacecraftConfig, SubsystemCategory } from '../../core/types';
 
+// --- PBR Material Helpers ---
+
+function makeMetalFoilMaterial(baseColor: string, emissiveColor?: string, emissiveIntensity = 0): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: baseColor,
+    metalness: 0.85,
+    roughness: 0.15,
+    clearcoat: 0.3,
+    clearcoatRoughness: 0.2,
+    emissive: emissiveColor ? new THREE.Color(emissiveColor) : undefined,
+    emissiveIntensity,
+    reflectivity: 1.0,
+  });
+}
+
+function makeCarbonCompositeMaterial(baseColor: string): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: baseColor,
+    metalness: 0.1,
+    roughness: 0.85,
+  });
+}
+
+function makeSolarCellMaterial(): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#0a1628',
+    metalness: 0.95,
+    roughness: 0.02,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05,
+    emissive: new THREE.Color('#1e3a5f'),
+    emissiveIntensity: 0.15,
+    transmission: 0.05,
+    thickness: 0.3,
+  });
+}
+
+function makeThrusterBellMaterial(isVacuumOptimized = false): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: isVacuumOptimized ? '#1a1a2e' : '#2d2d3a',
+    metalness: 0.9,
+    roughness: isVacuumOptimized ? 0.15 : 0.25,
+    emissive: isVacuumOptimized ? new THREE.Color('#0f0f1a') : new THREE.Color('#1a1008'),
+    emissiveIntensity: isVacuumOptimized ? 0.1 : 0.05,
+  });
+}
+
+function makeMLIMaterial(): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#c9a84c',
+    metalness: 0.95,
+    roughness: 0.08,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.1,
+    emissive: new THREE.Color('#8b6f1a'),
+    emissiveIntensity: 0.08,
+  });
+}
+
+function makeWhiteThermalMaterial(): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#e8eef4',
+    metalness: 0.05,
+    roughness: 0.92,
+    clearcoat: 0.2,
+    clearcoatRoughness: 0.3,
+  });
+}
+
+function makeTitaniumMaterial(): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#a8b0ba',
+    metalness: 0.75,
+    roughness: 0.35,
+    clearcoat: 0.4,
+    clearcoatRoughness: 0.2,
+  });
+}
+
+function makeGoldKaptonMaterial(): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#d4a82e',
+    metalness: 0.9,
+    roughness: 0.12,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.15,
+    emissive: new THREE.Color('#8b6f1a'),
+    emissiveIntensity: 0.1,
+  });
+}
+
 export function disposeObject3D(root: THREE.Object3D): void {
   root.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
@@ -11,15 +102,38 @@ export function disposeObject3D(root: THREE.Object3D): void {
     if (mat) {
       const mats = Array.isArray(mat) ? mat : [mat];
       for (const m of mats) {
-        const std = m as THREE.MeshStandardMaterial;
-        std.map?.dispose();
-        std.emissiveMap?.dispose();
-        std.bumpMap?.dispose();
+        if (m instanceof THREE.Material) {
+          // Common maps
+          (m as THREE.MeshStandardMaterial).map?.dispose();
+          (m as THREE.MeshStandardMaterial).emissiveMap?.dispose();
+          (m as THREE.MeshStandardMaterial).bumpMap?.dispose();
+          (m as THREE.MeshStandardMaterial).normalMap?.dispose();
+          (m as THREE.MeshStandardMaterial).roughnessMap?.dispose();
+          (m as THREE.MeshStandardMaterial).metalnessMap?.dispose();
+          (m as THREE.MeshStandardMaterial).displacementMap?.dispose();
+          // Physical material maps
+          (m as THREE.MeshPhysicalMaterial).clearcoatMap?.dispose();
+          (m as THREE.MeshPhysicalMaterial).clearcoatRoughnessMap?.dispose();
+          (m as THREE.MeshPhysicalMaterial).transmissionMap?.dispose();
+          (m as THREE.MeshPhysicalMaterial).thicknessMap?.dispose();
+        }
         m.dispose();
       }
     }
   });
 }
+
+// Export material creators for use in other files
+export {
+  makeMetalFoilMaterial,
+  makeCarbonCompositeMaterial,
+  makeSolarCellMaterial,
+  makeThrusterBellMaterial,
+  makeMLIMaterial,
+  makeWhiteThermalMaterial,
+  makeTitaniumMaterial,
+  makeGoldKaptonMaterial,
+};
 
 export function createStarfield(count = 1600, radius = 3200): THREE.Points {
   const positions = new Float32Array(count * 3);
@@ -207,54 +321,97 @@ export function createPlanetMesh(
   group.name = `planet-${kind.toLowerCase()}`;
 
   const tex = makePlanetCanvasTexture(kind);
-  const segs = 40;
+  const segs = 48;
   const geom = new THREE.SphereGeometry(radiusUnits, segs, segs);
-  const mat = new THREE.MeshStandardMaterial({
-    map: tex,
-    roughness: kind === 'EARTH' ? 0.65 : 0.9,
-    metalness: 0.05,
-  });
 
-  const body = new THREE.Mesh(geom, mat);
+  // PBR materials for planets
+  let bodyMat: THREE.MeshStandardMaterial;
+  if (kind === 'EARTH') {
+    bodyMat = new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.65,
+      metalness: 0.05,
+      envMapIntensity: 1.0,
+    });
+  } else if (kind === 'MOON') {
+    bodyMat = new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.95,
+      metalness: 0.02,
+    });
+  } else {
+    bodyMat = new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.88,
+      metalness: 0.03,
+    });
+  }
+
+  const body = new THREE.Mesh(geom, bodyMat);
   body.name = `${kind.toLowerCase()}-surface`;
   group.add(body);
 
   if (kind === 'EARTH' || kind === 'MARS') {
-    // Atmospheric Fresnel rim glow
-    const rimGeom = new THREE.SphereGeometry(radiusUnits * 1.045, segs, segs);
-    const rimColor =
-      kind === 'EARTH' ? new THREE.Color('#3ca8ff') : new THREE.Color('#ff8c5a');
+    // Enhanced Atmospheric Fresnel Rim Glow - uses BackSide for proper limb glow
+    const rimGeom = new THREE.SphereGeometry(radiusUnits * 1.035, segs, segs);
+
     const rimMat = new THREE.ShaderMaterial({
       uniforms: {
-        glowColor: { value: rimColor },
+        uInnerColor: { value: new THREE.Color(kind === 'EARTH' ? '#3ca8ff' : '#ff8c5a') },
+        uOuterColor: { value: new THREE.Color(kind === 'EARTH' ? '#0ea5e9' : '#fb923c') },
+        uFresnelPower: { value: 3.2 },
+        uFresnelScale: { value: 1.0 },
+        uTime: { value: 0 },
+        uCameraPos: { value: new THREE.Vector3() },
       },
       vertexShader: `
         varying vec3 vNormal;
-        varying vec3 vViewPosition;
+        varying vec3 vWorldPos;
         void main() {
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           vNormal = normalize(normalMatrix * normal);
-          vViewPosition = -mvPosition.xyz;
-          gl_Position = projectionMatrix * mvPosition;
+          vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
-        uniform vec3 glowColor;
+        uniform vec3 uInnerColor;
+        uniform vec3 uOuterColor;
+        uniform float uFresnelPower;
+        uniform float uFresnelScale;
+        uniform float uTime;
+        uniform vec3 uCameraPos;
         varying vec3 vNormal;
-        varying vec3 vViewPosition;
+        varying vec3 vWorldPos;
+
         void main() {
-          vec3 viewDir = normalize(vViewPosition);
-          float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 2.8);
-          gl_FragColor = vec4(glowColor, fresnel * 0.72);
+          vec3 viewDir = normalize(uCameraPos - vWorldPos);
+          float NdotV = max(dot(vNormal, viewDir), 0.0);
+          float fresnel = pow(1.0 - NdotV, uFresnelPower) * uFresnelScale;
+
+          // Add subtle atmospheric shimmer
+          float shimmer = sin(vWorldPos.y * 2.0 + uTime * 0.8) * 0.02 + 0.98;
+
+          // Color gradient from inner to outer atmosphere
+          float gradient = smoothstep(0.15, 0.85, fresnel);
+          vec3 color = mix(uInnerColor, uOuterColor, gradient);
+
+          float alpha = fresnel * shimmer * 0.85;
+          gl_FragColor = vec4(color, alpha);
         }
       `,
       transparent: true,
       blending: THREE.AdditiveBlending,
-      side: THREE.FrontSide,
+      side: THREE.BackSide,
       depthWrite: false,
+      depthTest: true,
     });
+
     const rim = new THREE.Mesh(rimGeom, rimMat);
     rim.name = `${kind.toLowerCase()}-atmosphere`;
+    rim.userData.updateUniforms = (camera: THREE.Camera, time: number) => {
+      rimMat.uniforms.uCameraPos.value.setFromMatrixPosition(camera.matrixWorld);
+      rimMat.uniforms.uTime.value = time;
+    };
     group.add(rim);
   }
 
@@ -397,11 +554,15 @@ function getCategorySlotY(cat: SubsystemCategory): number {
 export function createSpentStage1Mesh(launcherId: string | null): THREE.Group {
   const group = new THREE.Group();
   const scaleW =
-    launcherId === 'launcher-heavy'
-      ? 1.35
-      : launcherId === 'launcher-medium'
-        ? 1.05
-        : 0.78;
+    launcherId === 'launcher-super-heavy'
+      ? 2.0
+      : launcherId === 'launcher-heavy'
+        ? 1.35
+        : launcherId === 'launcher-medium-heavy'
+          ? 1.2
+          : launcherId === 'launcher-medium'
+            ? 1.05
+            : 0.78;
 
   const bodyMat = new THREE.MeshStandardMaterial({
     color: '#d8dee9',
@@ -464,11 +625,15 @@ export function createRocketStackGroup(
   // --- LAUNCHER (Stage 1 + Stage 2) ---
   const launcherId = config.launcherId;
   const lvScaleW =
-    launcherId === 'launcher-heavy'
-      ? 1.35
-      : launcherId === 'launcher-medium'
-        ? 1.05
-        : 0.8;
+    launcherId === 'launcher-super-heavy'
+      ? 2.0
+      : launcherId === 'launcher-heavy'
+        ? 1.35
+        : launcherId === 'launcher-medium-heavy'
+          ? 1.2
+          : launcherId === 'launcher-medium'
+            ? 1.05
+            : 0.8;
 
   if (launcherId) {
     const lvGroup = new THREE.Group();
@@ -478,11 +643,15 @@ export function createRocketStackGroup(
     const hullMat = conflictMat('#e2e8f0', 'launcher');
     const accentMat = new THREE.MeshStandardMaterial({
       color:
-        launcherId === 'launcher-heavy'
-          ? '#f97316'
-          : launcherId === 'launcher-medium'
-            ? '#0ea5e9'
-            : '#22c55e',
+        launcherId === 'launcher-super-heavy'
+          ? '#ef4444'
+          : launcherId === 'launcher-heavy'
+            ? '#f97316'
+            : launcherId === 'launcher-medium-heavy'
+              ? '#f59e0b'
+              : launcherId === 'launcher-medium'
+                ? '#0ea5e9'
+                : '#22c55e',
       roughness: 0.4,
       metalness: 0.3,
     });
@@ -509,22 +678,45 @@ export function createRocketStackGroup(
       stripe.position.y = 3.2;
       lvGroup.add(stripe);
 
-      // Side boosters for Heavy
-      if (launcherId === 'launcher-heavy') {
-        for (const side of [-1, 1]) {
+      // Side boosters for Heavy and Super-Heavy
+      if (launcherId === 'launcher-heavy' || launcherId === 'launcher-super-heavy') {
+        const boosterPositions = launcherId === 'launcher-super-heavy'
+          ? [-1.5, -0.5, 0.5, 1.5]
+          : [-1, 1];
+
+        for (const side of boosterPositions) {
+          const boosterScale = launcherId === 'launcher-super-heavy' ? 0.4 : 0.32;
           const booster = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.32, 0.34, 3.1, 16),
+            new THREE.CylinderGeometry(boosterScale, boosterScale * 1.06, 3.1, 16),
             hullMat
           );
-          booster.position.set(side * 0.98, 1.75, 0);
+          booster.position.set(side * (0.98 * (launcherId === 'launcher-super-heavy' ? 1.3 : 1)), 1.75, 0);
           lvGroup.add(booster);
 
-          const nose = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.6, 16), accentMat);
-          nose.position.set(side * 0.98, 3.6, 0);
+          const nose = new THREE.Mesh(new THREE.ConeGeometry(boosterScale, 0.6, 16), accentMat);
+          nose.position.set(side * (0.98 * (launcherId === 'launcher-super-heavy' ? 1.3 : 1)), 3.6, 0);
           lvGroup.add(nose);
 
-          const bNozzle = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.45, 14), engineMat);
-          bNozzle.position.set(side * 0.98, 0.05, 0);
+          const bNozzle = new THREE.Mesh(new THREE.ConeGeometry(boosterScale * 0.75, 0.45, 14), engineMat);
+          bNozzle.position.set(side * (0.98 * (launcherId === 'launcher-super-heavy' ? 1.3 : 1)), 0.05, 0);
+          lvGroup.add(bNozzle);
+        }
+      } else if (launcherId === 'launcher-medium-heavy') {
+        // Medium-Heavy has 2 smaller strap-on boosters
+        for (const side of [-1, 1]) {
+          const booster = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.24, 0.26, 2.8, 12),
+            hullMat
+          );
+          booster.position.set(side * 0.88, 1.6, 0);
+          lvGroup.add(booster);
+
+          const nose = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.5, 12), accentMat);
+          nose.position.set(side * 0.88, 3.3, 0);
+          lvGroup.add(nose);
+
+          const bNozzle = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.4, 10), engineMat);
+          bNozzle.position.set(side * 0.88, 0.05, 0);
           lvGroup.add(bNozzle);
         }
       }
@@ -562,21 +754,25 @@ export function createRocketStackGroup(
     stGroup.name = 'slot-structure';
     stGroup.userData.category = 'structure';
     const stMat = conflictMat(
-      config.structureId === 'struct-lander-chassis'
-        ? '#cbd5e1'
-        : config.structureId === 'struct-modular-bus'
-          ? '#94a3b8'
-          : '#64748b',
+      config.structureId === 'struct-heavy-landing-platform'
+        ? '#94a3b8'
+        : config.structureId === 'struct-lander-chassis'
+          ? '#cbd5e1'
+          : config.structureId === 'struct-modular-bus'
+            ? '#94a3b8'
+            : '#64748b',
       'structure'
     );
 
     const sides = config.structureId === 'struct-modular-bus' ? 6 : 8;
     const radius =
-      config.structureId === 'struct-lander-chassis'
-        ? 0.74
-        : config.structureId === 'struct-modular-bus'
-          ? 0.62
-          : 0.48;
+      config.structureId === 'struct-heavy-landing-platform'
+        ? 1.0
+        : config.structureId === 'struct-lander-chassis'
+          ? 0.74
+          : config.structureId === 'struct-modular-bus'
+            ? 0.62
+            : 0.48;
     const bus = new THREE.Mesh(
       new THREE.CylinderGeometry(radius, radius, 1.65, sides),
       stMat
@@ -584,22 +780,28 @@ export function createRocketStackGroup(
     bus.position.y = 6.35;
     stGroup.add(bus);
 
-    if (config.structureId === 'struct-lander-chassis') {
+    if (config.structureId === 'struct-lander-chassis' || config.structureId === 'struct-heavy-landing-platform') {
       const legMat = new THREE.MeshStandardMaterial({
         color: '#f59e0b',
         metalness: 0.65,
         roughness: 0.35,
       });
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 1.3, 8), legMat);
-        leg.position.set(Math.cos(a) * 0.9, 5.4, Math.sin(a) * 0.9);
+      const legCount = config.structureId === 'struct-heavy-landing-platform' ? 6 : 4;
+      const legRadius = config.structureId === 'struct-heavy-landing-platform' ? 1.25 : 0.9;
+      const legHeight = config.structureId === 'struct-heavy-landing-platform' ? 1.6 : 1.3;
+      for (let i = 0; i < legCount; i++) {
+        const a = (i / legCount) * Math.PI * 2 + Math.PI / legCount;
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, legHeight, 8), legMat);
+        leg.position.set(Math.cos(a) * legRadius, 5.4, Math.sin(a) * legRadius);
         leg.rotation.z = Math.cos(a) * 0.5;
         leg.rotation.x = -Math.sin(a) * 0.5;
         stGroup.add(leg);
 
-        const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.08, 10), legMat);
-        pad.position.set(Math.cos(a) * 1.18, 4.82, Math.sin(a) * 1.18);
+        const pad = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.2, 0.08, 10),
+          legMat
+        );
+        pad.position.set(Math.cos(a) * (legRadius + 0.25), 4.75, Math.sin(a) * (legRadius + 0.25));
         stGroup.add(pad);
       }
     }
@@ -620,6 +822,38 @@ export function createRocketStackGroup(
       shield.rotation.x = Math.PI;
       shield.position.y = 5.48;
       thGroup.add(shield);
+    } else if (config.thermalId === 'thermal-deployable-radiator') {
+      // Active Deployable Radiator - large folding panels
+      const radMat = conflictMat('#06b6d4', 'thermal');
+      const frameMat = new THREE.MeshStandardMaterial({
+        color: '#cbd5e1',
+        metalness: 0.7,
+        roughness: 0.3,
+      });
+      for (const side of [-1, 1]) {
+        // Main radiator panel
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.06, 1.4), radMat);
+        panel.position.set(side * 1.3, 6.25, 0);
+        thGroup.add(panel);
+
+        // Deployment hinge/strut
+        const strut = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8),
+          frameMat
+        );
+        strut.rotation.z = Math.PI / 2;
+        strut.position.set(side * 0.55, 6.25, 0);
+        thGroup.add(strut);
+
+        // Fluid loop tubing visual
+        const tube = new THREE.Mesh(
+          new THREE.TorusGeometry(0.6, 0.025, 8, 16),
+          new THREE.MeshStandardMaterial({ color: '#0ea5e9', metalness: 0.8, roughness: 0.2 })
+        );
+        tube.rotation.x = Math.PI / 2;
+        tube.position.set(side * 0.95, 6.15, 0);
+        thGroup.add(tube);
+      }
     } else if (config.thermalId === 'thermal-active-louvers') {
       const louverMat = conflictMat('#e2e8f0', 'thermal');
       for (const side of [-1, 1]) {
@@ -643,11 +877,13 @@ export function createRocketStackGroup(
     batGroup.name = 'slot-battery';
     batGroup.userData.category = 'battery';
     const scale =
-      config.batteryId === 'bat-solid-state'
-        ? 1.25
-        : config.batteryId === 'bat-liion-med'
-          ? 1.0
-          : 0.72;
+      config.batteryId === 'bat-ultra-solid-state'
+        ? 1.5
+        : config.batteryId === 'bat-solid-state'
+          ? 1.25
+          : config.batteryId === 'bat-liion-med'
+            ? 1.0
+            : 0.72;
     const batMat = conflictMat('#06b6d4', 'battery');
     for (const side of [-1, 1]) {
       const pack = new THREE.Mesh(
@@ -656,6 +892,26 @@ export function createRocketStackGroup(
       );
       pack.position.set(side * 0.56, 6.35, 0);
       batGroup.add(pack);
+    }
+    // Ultra version has additional cooling fins
+    if (config.batteryId === 'bat-ultra-solid-state') {
+      const finMat = new THREE.MeshStandardMaterial({
+        color: '#22d3ee',
+        emissive: '#06b6d4',
+        emissiveIntensity: 0.3,
+        roughness: 0.4,
+        metalness: 0.5,
+      });
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 3; i++) {
+          const fin = new THREE.Mesh(
+            new THREE.BoxGeometry(0.04, 0.5, 0.3),
+            finMat
+          );
+          fin.position.set(side * 0.56, 6.35 + (i - 1) * 0.25, 0.25);
+          batGroup.add(fin);
+        }
+      }
     }
     root.add(batGroup);
   }
@@ -666,15 +922,39 @@ export function createRocketStackGroup(
     cpuGroup.name = 'slot-computer';
     cpuGroup.userData.category = 'computer';
     const cpuColor =
-      config.computerId === 'cpu-ai-edge'
-        ? '#a855f7'
-        : config.computerId === 'cpu-radhard-obc'
-          ? '#3b82f6'
-          : '#64748b';
+      config.computerId === 'cpu-radhard-autonomous'
+        ? '#ec4899'
+        : config.computerId === 'cpu-ai-edge'
+          ? '#a855f7'
+          : config.computerId === 'cpu-radhard-obc'
+            ? '#3b82f6'
+            : '#64748b';
     const cpuMat = conflictMat(cpuColor, 'computer');
     const avionics = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.38, 0.55), cpuMat);
     avionics.position.y = 6.95;
     cpuGroup.add(avionics);
+
+    // Rad-hard autonomous has redundant compute modules
+    if (config.computerId === 'cpu-radhard-autonomous') {
+      const redundantMat = new THREE.MeshStandardMaterial({
+        color: '#fda4af',
+        metalness: 0.6,
+        roughness: 0.3,
+      });
+      for (const offset of [-0.35, 0.35]) {
+        const module = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.3, 0.4), redundantMat);
+        module.position.set(offset, 7.1, 0);
+        cpuGroup.add(module);
+      }
+      // Vision co-processor camera
+      const vision = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.08, 0.15, 12),
+        new THREE.MeshStandardMaterial({ color: '#1e293b', metalness: 0.8, roughness: 0.1 })
+      );
+      vision.position.set(0, 7.25, 0.4);
+      vision.rotation.x = -0.2;
+      cpuGroup.add(vision);
+    }
     root.add(cpuGroup);
   }
 
@@ -684,24 +964,71 @@ export function createRocketStackGroup(
     adcsGroup.name = 'slot-adcs';
     adcsGroup.userData.category = 'adcs';
     const adcsMat = conflictMat(
-      config.adcsId === 'adcs-cmg-precision'
-        ? '#f43f5e'
-        : config.adcsId === 'adcs-reaction-wheels'
-          ? '#38bdf8'
-          : '#94a3b8',
+      config.adcsId === 'adcs-cmg-optical-nav'
+        ? '#ec4899'
+        : config.adcsId === 'adcs-cmg-precision'
+          ? '#f43f5e'
+          : config.adcsId === 'adcs-reaction-wheels'
+            ? '#38bdf8'
+            : '#94a3b8',
       'adcs'
     );
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.09, 10, 24), adcsMat);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 7.45;
-    adcsGroup.add(ring);
 
-    if (config.adcsId !== 'adcs-magnetorquer') {
-      // Star tracker optical baffle
-      const tracker = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.32, 12), adcsMat);
-      tracker.position.set(0.5, 7.52, 0.25);
-      tracker.rotation.z = -0.6;
-      adcsGroup.add(tracker);
+    if (config.adcsId === 'adcs-cmg-optical-nav') {
+      // Tier 4: 6-CMG pyramid cluster + optical nav suite
+      // CMG pyramid (4 gimbaled flywheels in pyramid config)
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        const cmg = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.12, 0.12, 0.35, 12),
+          adcsMat
+        );
+        cmg.position.set(Math.cos(a) * 0.35, 7.45, Math.sin(a) * 0.35);
+        cmg.rotation.x = Math.PI / 4;
+        adcsGroup.add(cmg);
+
+        // Gimbal housing
+        const gimbal = new THREE.Mesh(
+          new THREE.TorusGeometry(0.18, 0.03, 8, 16),
+          new THREE.MeshStandardMaterial({ color: '#cbd5e1', metalness: 0.8, roughness: 0.2 })
+        );
+        gimbal.position.set(Math.cos(a) * 0.35, 7.3, Math.sin(a) * 0.35);
+        gimbal.rotation.x = Math.PI / 2;
+        adcsGroup.add(gimbal);
+      }
+      // Central pyramid hub
+      const hub = new THREE.Mesh(new THREE.OctahedronGeometry(0.18), adcsMat);
+      hub.position.y = 7.45;
+      adcsGroup.add(hub);
+
+      // Optical Navigation Camera (front-facing)
+      const optNav = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.1, 0.25, 12),
+        new THREE.MeshStandardMaterial({ color: '#1e293b', metalness: 0.9, roughness: 0.05 })
+      );
+      optNav.position.set(0, 7.6, 0.55);
+      optNav.rotation.x = -0.15;
+      adcsGroup.add(optNav);
+
+      // Star tracker (top)
+      const starTracker = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.28, 12), adcsMat);
+      starTracker.position.set(0, 7.85, 0.15);
+      starTracker.rotation.x = -0.3;
+      adcsGroup.add(starTracker);
+    } else {
+      // Tier 1-3: single ring
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.09, 10, 24), adcsMat);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 7.45;
+      adcsGroup.add(ring);
+
+      if (config.adcsId !== 'adcs-magnetorquer') {
+        // Star tracker optical baffle
+        const tracker = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.32, 12), adcsMat);
+        tracker.position.set(0.5, 7.52, 0.25);
+        tracker.rotation.z = -0.6;
+        adcsGroup.add(tracker);
+      }
     }
     root.add(adcsGroup);
   }
@@ -712,12 +1039,13 @@ export function createRocketStackGroup(
     pwrGroup.name = 'slot-power';
     pwrGroup.userData.category = 'power';
 
-    if (config.powerId === 'power-rtg') {
-      const rtgBodyMat = conflictMat('#334155', 'power');
+    if (config.powerId === 'power-rtg' || config.powerId === 'power-enhanced-rtg') {
+      const isEnhanced = config.powerId === 'power-enhanced-rtg';
+      const rtgBodyMat = conflictMat(isEnhanced ? '#1e293b' : '#334155', 'power');
       const rtgFinMat = new THREE.MeshStandardMaterial({
-        color: '#f97316',
-        emissive: '#ea580c',
-        emissiveIntensity: 0.7,
+        color: isEnhanced ? '#ef4444' : '#f97316',
+        emissive: isEnhanced ? '#dc2626' : '#ea580c',
+        emissiveIntensity: isEnhanced ? 0.9 : 0.7,
         roughness: 0.4,
       });
       const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.05, 12), rtgBodyMat);
@@ -725,17 +1053,40 @@ export function createRocketStackGroup(
       pod.position.set(0.95, 6.45, 0);
       pwrGroup.add(pod);
 
-      for (let i = 0; i < 4; i++) {
+      const finCount = isEnhanced ? 6 : 4;
+      for (let i = 0; i < finCount; i++) {
         const fin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.95, 0.55), rtgFinMat);
         fin.position.set(0.95, 6.45, 0);
-        fin.rotation.y = (i / 4) * Math.PI;
+        fin.rotation.y = (i / finCount) * Math.PI * 2;
         fin.rotation.z = Math.PI / 2.6;
         pwrGroup.add(fin);
       }
+
+      if (isEnhanced) {
+        // Enhanced RTG has central heat pipe
+        const pipe = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.08, 0.08, 1.05, 12),
+          new THREE.MeshStandardMaterial({ color: '#fef08a', emissive: '#facc15', emissiveIntensity: 0.5, roughness: 0.2 })
+        );
+        pipe.rotation.z = Math.PI / 2.6;
+        pipe.position.set(0.95, 6.45, 0);
+        pwrGroup.add(pipe);
+      }
     } else {
-      const span = config.powerId === 'power-large-solar' ? 2.6 : 1.5;
-      const chord = config.powerId === 'power-large-solar' ? 0.95 : 0.58;
-      const panelMat = conflictMat('#1d4ed8', 'power');
+      const span = config.powerId === 'power-multi-junction-solar'
+        ? 3.0
+        : config.powerId === 'power-large-solar'
+          ? 2.6
+          : 1.5;
+      const chord = config.powerId === 'power-multi-junction-solar'
+        ? 1.1
+        : config.powerId === 'power-large-solar'
+          ? 0.95
+          : 0.58;
+      const panelMat = conflictMat(
+        config.powerId === 'power-multi-junction-solar' ? '#0f172a' : '#1d4ed8',
+        'power'
+      );
       const frameMat = new THREE.MeshStandardMaterial({
         color: '#cbd5e1',
         metalness: 0.7,
@@ -754,6 +1105,31 @@ export function createRocketStackGroup(
         strut.rotation.z = Math.PI / 2;
         strut.position.set(side * 0.55, 6.65, 0);
         pwrGroup.add(strut);
+      }
+
+      // Multi-junction has distinctive cell pattern
+      if (config.powerId === 'power-multi-junction-solar') {
+        const cellMat = new THREE.MeshStandardMaterial({
+          color: '#020617',
+          metalness: 0.9,
+          roughness: 0.05,
+        });
+        for (const side of [-1, 1]) {
+          for (let row = 0; row < 5; row++) {
+            for (let col = 0; col < 3; col++) {
+              const cell = new THREE.Mesh(
+                new THREE.BoxGeometry(0.55, 0.02, 0.3),
+                cellMat
+              );
+              cell.position.set(
+                side * (0.65 + 0.25 + col * 0.7),
+                6.67,
+                (col - 1) * 0.38
+              );
+              pwrGroup.add(cell);
+            }
+          }
+        }
       }
     }
     root.add(pwrGroup);
@@ -788,6 +1164,104 @@ export function createRocketStackGroup(
       const secondary = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.16, 12), tubeMat);
       secondary.position.set(0, 8.85, 0.45);
       payGroup.add(secondary);
+    } else if (config.payloadId === 'payload-hyperspectral-imager') {
+      // Tier 4: Hyperspectral imager - larger aperture, distinctive prism/slit
+      const housingMat = conflictMat('#0f172a', 'payload');
+      const prismMat = new THREE.MeshPhysicalMaterial({
+        color: '#c084fc',
+        metalness: 0.8,
+        roughness: 0.1,
+        transmission: 0.3,
+        thickness: 0.5,
+        transparent: true,
+      });
+      const goldMat = conflictMat('#facc15', 'payload');
+
+      // Main telescope tube
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 1.2, 12), housingMat);
+      tube.position.y = 8.3;
+      payGroup.add(tube);
+
+      // Sunshield
+      const sunshield = new THREE.Mesh(
+        new THREE.BoxGeometry(2.0, 0.08, 1.6),
+        new THREE.MeshStandardMaterial({ color: '#c084fc', metalness: 0.6, roughness: 0.2 })
+      );
+      sunshield.position.y = 7.85;
+      payGroup.add(sunshield);
+
+      // Primary mirror (larger)
+      const mirror = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.58, 0.16, 8), goldMat);
+      mirror.rotation.x = Math.PI / 2.3;
+      mirror.position.y = 8.9;
+      payGroup.add(mirror);
+
+      // Hyperspectral prism assembly (distinctive)
+      const prism = new THREE.Mesh(
+        new THREE.BoxGeometry(0.35, 0.25, 0.45),
+        prismMat
+      );
+      prism.position.set(0.4, 8.7, 0);
+      payGroup.add(prism);
+
+      // Slit spectrometer entrance
+      const slit = new THREE.Mesh(
+        new THREE.BoxGeometry(0.02, 0.15, 0.4),
+        new THREE.MeshStandardMaterial({ color: '#1e293b', metalness: 0.9, roughness: 0.05 })
+      );
+      slit.position.set(0.58, 8.7, 0);
+      payGroup.add(slit);
+    } else if (config.payloadId === 'payload-deep-space-lander-science') {
+      // Tier 4: Deep-surface science suite - drill + mass spec + seismo
+      const baseMat = conflictMat('#e2e8f0', 'payload');
+      const instrumentMat = conflictMat('#a855f7', 'payload');
+      const mastMat = new THREE.MeshStandardMaterial({ color: '#f59e0b', metalness: 0.6 });
+
+      // Main instrument deck
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.6, 1.0), baseMat);
+      deck.position.y = 8.15;
+      payGroup.add(deck);
+
+      // Deep drill (tall, distinctive)
+      const drill = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.8, 12), instrumentMat);
+      drill.position.set(-0.35, 8.9, 0.3);
+      payGroup.add(drill);
+
+      // Drill head
+      const drillHead = new THREE.Mesh(
+        new THREE.ConeGeometry(0.12, 0.2, 8),
+        new THREE.MeshStandardMaterial({ color: '#ef4444', metalness: 0.8, roughness: 0.2 })
+      );
+      drillHead.position.set(-0.35, 10.0, 0.3);
+      payGroup.add(drillHead);
+
+      // Mass spectrometer
+      const massSpec = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.5, 16), instrumentMat);
+      massSpec.position.set(0.35, 8.5, -0.25);
+      payGroup.add(massSpec);
+
+      // Laser ablation port
+      const laser = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.04, 0.15, 8),
+        new THREE.MeshStandardMaterial({ color: '#fef08a', emissive: '#facc15', emissiveIntensity: 0.8 })
+      );
+      laser.position.set(0.55, 8.5, -0.25);
+      laser.rotation.x = -0.2;
+      payGroup.add(laser);
+
+      // Seismometer (on ground contact foot)
+      const seismo = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 0.2), baseMat);
+      seismo.position.set(-0.45, 7.7, -0.35);
+      payGroup.add(seismo);
+
+      // Mast with cameras
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.9, 8), mastMat);
+      mast.position.set(0.3, 8.7, 0.4);
+      payGroup.add(mast);
+
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.15, 0.2), baseMat);
+      head.position.set(0.3, 9.2, 0.4);
+      payGroup.add(head);
     } else if (config.payloadId === 'payload-surface-lander') {
       const domeMat = conflictMat('#e2e8f0', 'payload');
       const mastMat = new THREE.MeshStandardMaterial({ color: '#f59e0b', metalness: 0.5 });
@@ -962,4 +1436,285 @@ export function createConeBeam(
     depthWrite: false,
   });
   return new THREE.Mesh(geom, mat);
+}
+
+// --- Particle System for Exhaust Plumes ---
+
+interface ParticleSystem {
+  points: THREE.Points;
+  geometry: THREE.BufferGeometry;
+  material: THREE.PointsMaterial;
+  particles: {
+    positions: Float32Array;
+    sizes: Float32Array;
+    colors: Float32Array;
+    alphas: Float32Array;
+    velocities: Float32Array;
+    lifetimes: Float32Array;
+    ages: Float32Array;
+  };
+  maxParticles: number;
+  activeCount: number;
+  update: (dt: number, throttle: number, inVacuum: boolean, stageType: 'kerolox' | 'hydrolox' | 'methalox' | 'ion') => void;
+  dispose: () => void;
+}
+
+function createParticleTexture(): THREE.DataTexture {
+  const size = 64;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (x - size / 2) / (size / 2);
+      const dy = (y - size / 2) / (size / 2);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const alpha = dist < 1.0 ? Math.pow(1.0 - dist, 2.5) : 0;
+      const idx = (y * size + x) * 4;
+      data[idx] = 255;
+      data[idx + 1] = 255;
+      data[idx + 2] = 255;
+      data[idx + 3] = Math.round(alpha * 255);
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+const particleTexture = createParticleTexture();
+
+export function createParticleSystem(
+  maxParticles: number = 800,
+  isMainEngine: boolean = true
+): ParticleSystem {
+  const geometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(maxParticles * 3);
+  const sizes = new Float32Array(maxParticles);
+  const colors = new Float32Array(maxParticles * 3);
+  const alphas = new Float32Array(maxParticles);
+  const velocities = new Float32Array(maxParticles * 3);
+  const lifetimes = new Float32Array(maxParticles);
+  const ages = new Float32Array(maxParticles);
+
+  // Initialize all particles as dead
+  for (let i = 0; i < maxParticles; i++) {
+    lifetimes[i] = 0;
+    ages[i] = 0;
+    alphas[i] = 0;
+    sizes[i] = 0;
+  }
+
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+
+  // Stage-specific color palettes
+  const keroloxColors = [
+    new THREE.Color('#ff6b1a'),  // Hot amber
+    new THREE.Color('#ff9500'),  // Orange
+    new THREE.Color('#ffaa33'),  // Light orange
+    new THREE.Color('#ffcc66'),  // Yellow-orange
+    new THREE.Color('#ffdd99'),  // Pale yellow
+  ];
+  const hydroloxColors = [
+    new THREE.Color('#88ccff'),  // Cyan-blue
+    new THREE.Color('#aaddff'),  // Light cyan
+    new THREE.Color('#ccffff'),  // Pale cyan
+    new THREE.Color('#ffffff'),  // White hot core
+    new THREE.Color('#eef8ff'),  // Very pale blue
+  ];
+  const methaloxColors = [
+    new THREE.Color('#ff5500'),  // Deep orange
+    new THREE.Color('#ff8822'),  // Orange
+    new THREE.Color('#ffaa44'),  // Light orange
+    new THREE.Color('#ffcc77'),  // Yellow-orange
+    new THREE.Color('#ffeedd'),  // Pale cream
+  ];
+  const ionColors = [
+    new THREE.Color('#bb88ff'),  // Violet
+    new THREE.Color('#ccaaaa'),  // Light violet
+    new THREE.Color('#ddccff'),  // Pale violet
+    new THREE.Color('#eeeeff'),  // Almost white
+    new THREE.Color('#ffffff'),  // White core
+  ];
+
+  const material = new THREE.PointsMaterial({
+    size: 1.0,
+    vertexColors: true,
+    transparent: true,
+    opacity: 1.0,
+    sizeAttenuation: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    map: particleTexture,
+    alphaMap: particleTexture,
+    alphaTest: 0.001,
+  });
+
+  const points = new THREE.Points(geometry, material);
+  points.frustumCulled = false;
+
+  const system: ParticleSystem = {
+    points,
+    geometry,
+    material,
+    particles: { positions, sizes, colors, alphas, velocities, lifetimes, ages },
+    maxParticles,
+    activeCount: 0,
+    update: (dt: number, throttle: number, inVacuum: boolean, stageType: 'kerolox' | 'hydrolox' | 'methalox' | 'ion') => {
+      if (throttle <= 0.01) {
+        // Fade out existing particles
+        for (let i = 0; i < system.activeCount; i++) {
+          ages[i] += dt;
+          const lifeRatio = ages[i] / lifetimes[i];
+          if (lifeRatio >= 1.0) {
+            alphas[i] = 0;
+            continue;
+          }
+          alphas[i] = Math.max(0, (1.0 - lifeRatio) * alphas[i]);
+
+          // Continue physics
+          positions[i * 3] += velocities[i * 3] * dt;
+          positions[i * 3 + 1] += velocities[i * 3 + 1] * dt;
+          positions[i * 3 + 2] += velocities[i * 3 + 2] * dt;
+
+          // Gravity falloff for pad smoke
+          if (!isMainEngine) {
+            velocities[i * 3 + 1] -= 0.5 * dt; // gentle settling
+          }
+        }
+        geometry.attributes.position.needsUpdate = true;
+        geometry.attributes.alpha.needsUpdate = true;
+        geometry.attributes.size.needsUpdate = true;
+        return;
+      }
+
+      // Select color palette
+      let palette: THREE.Color[];
+      let baseSpeed: number;
+      let spread: number;
+      let particleLifetime: number;
+      let particleSize: number;
+      let spawnRate: number;
+
+      switch (stageType) {
+        case 'kerolox':
+          palette = keroloxColors;
+          baseSpeed = inVacuum ? 120 : 60;
+          spread = inVacuum ? 0.45 : 0.25;
+          particleLifetime = inVacuum ? 1.2 : 0.6;
+          particleSize = inVacuum ? 2.8 : 1.5;
+          spawnRate = 120;
+          break;
+        case 'hydrolox':
+          palette = hydroloxColors;
+          baseSpeed = inVacuum ? 180 : 90;
+          spread = inVacuum ? 0.35 : 0.2;
+          particleLifetime = inVacuum ? 1.0 : 0.5;
+          particleSize = inVacuum ? 2.2 : 1.2;
+          spawnRate = 100;
+          break;
+        case 'methalox':
+          palette = methaloxColors;
+          baseSpeed = inVacuum ? 150 : 75;
+          spread = inVacuum ? 0.4 : 0.22;
+          particleLifetime = inVacuum ? 1.1 : 0.55;
+          particleSize = inVacuum ? 2.5 : 1.3;
+          spawnRate = 110;
+          break;
+        case 'ion':
+          palette = ionColors;
+          baseSpeed = 300;
+          spread = 0.08;
+          particleLifetime = 2.0;
+          particleSize = 0.8;
+          spawnRate = 60;
+          break;
+      }
+
+      const spawnCount = Math.floor(spawnRate * throttle * dt);
+      const vacuumScale = inVacuum ? 1.5 : 1.0;
+
+      // Spawn new particles
+      for (let s = 0; s < spawnCount && system.activeCount < maxParticles; s++) {
+        const idx = system.activeCount;
+        system.activeCount++;
+
+        // Position at engine exit (origin)
+        positions[idx * 3] = (Math.random() - 0.5) * 0.1;
+        positions[idx * 3 + 1] = 0;
+        positions[idx * 3 + 2] = (Math.random() - 0.5) * 0.1;
+
+        // Velocity: mainly backward with spread
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * spread;
+        const speed = baseSpeed * (0.7 + Math.random() * 0.6) * vacuumScale;
+
+        velocities[idx * 3] = -Math.sin(phi) * Math.cos(theta) * speed;
+        velocities[idx * 3 + 1] = Math.cos(phi) * speed + (Math.random() - 0.5) * 2;
+        velocities[idx * 3 + 2] = -Math.sin(phi) * Math.sin(theta) * speed;
+
+        // Lifetime and size
+        lifetimes[idx] = particleLifetime * (0.7 + Math.random() * 0.6);
+        ages[idx] = 0;
+        alphas[idx] = 1.0;
+        sizes[idx] = particleSize * (0.8 + Math.random() * 0.4) * vacuumScale;
+
+        // Color from palette with variation
+        const colorIdx = Math.floor(Math.random() * palette.length);
+        const color = palette[colorIdx];
+        colors[idx * 3] = color.r;
+        colors[idx * 3 + 1] = color.g;
+        colors[idx * 3 + 2] = color.b;
+      }
+
+      // Update existing particles
+      let aliveCount = 0;
+      for (let i = 0; i < system.activeCount; i++) {
+        ages[i] += dt;
+        const lifeRatio = ages[i] / lifetimes[i];
+
+        if (lifeRatio >= 1.0) {
+          alphas[i] = 0;
+          continue;
+        }
+
+        aliveCount++;
+
+        // Physics
+        positions[i * 3] += velocities[i * 3] * dt;
+        positions[i * 3 + 1] += velocities[i * 3 + 1] * dt;
+        positions[i * 3 + 2] += velocities[i * 3 + 2] * dt;
+
+        // Cooling/expansion
+        const coolFactor = 1.0 - lifeRatio * 0.7;
+        alphas[i] = coolFactor * coolFactor;
+        sizes[i] = particleSize * (0.8 + Math.random() * 0.4) * (1.0 + lifeRatio * 1.5) * vacuumScale;
+
+        // Color shift as it cools (shift toward red/orange for chemical, blue/violet for ion)
+        if (stageType === 'ion') {
+          const shift = lifeRatio * 0.3;
+          colors[i * 3] = Math.min(1.0, colors[i * 3] + shift);
+          colors[i * 3 + 1] = Math.min(1.0, colors[i * 3 + 1] + shift * 0.5);
+        } else {
+          const shift = lifeRatio * 0.4;
+          colors[i * 3] = Math.min(1.0, colors[i * 3] + shift);
+          colors[i * 3 + 1] = Math.max(0.0, colors[i * 3 + 1] - shift * 0.3);
+        }
+      }
+
+      system.activeCount = aliveCount;
+      geometry.attributes.position.needsUpdate = true;
+      geometry.attributes.size.needsUpdate = true;
+      geometry.attributes.color.needsUpdate = true;
+      geometry.attributes.alpha.needsUpdate = true;
+    },
+    dispose: () => {
+      geometry.dispose();
+      material.dispose();
+      particleTexture.dispose();
+    },
+  };
+
+  return system;
 }

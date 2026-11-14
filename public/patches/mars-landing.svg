@@ -1,0 +1,102 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="marsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3d1a0f;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#5c2a1a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3d1a0f;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="marsSurfaceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#9d4a2c;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#ba5531;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8c3d22;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="atmosphereGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff8c5a;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#fb923c;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ff8c5a;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="url(#marsGrad)" stroke="#fb923c" stroke-width="3"/>
+  <!-- Stars -->
+  <g fill="#ffffff" opacity="0.6">
+    <circle cx="60" cy="50" r="1"/><circle cx="200" cy="45" r="0.8"/><circle cx="40" cy="180" r="1.2"/>
+    <circle cx="220" cy="210" r="0.6"/><circle cx="90" cy="220" r="1"/><circle cx="180" cy="80" r="0.8"/>
+  </g>
+  <!-- Mars atmosphere glow -->
+  <ellipse cx="128" cy="128" rx="125" ry="125" fill="none" stroke="url(#atmosphereGrad)" stroke-width="4" opacity="0.4"/>
+  <ellipse cx="128" cy="128" rx="115" ry="115" fill="none" stroke="#fb923c" stroke-width="1.5" opacity="0.3" stroke-dasharray="12,8"/>
+  <!-- Mars surface -->
+  <ellipse cx="128" cy="160" rx="100" ry="40" fill="url(#marsSurfaceGrad)"/>
+  <ellipse cx="128" cy="155" rx="95" ry="35" fill="none" stroke="#ba5531" stroke-width="1" stroke-dasharray="6,4"/>
+  <!-- Canyons/highlands -->
+  <g stroke="#5c2a1a" stroke-width="2" opacity="0.6">
+    <path d="M 50 155 Q 90 130 130 155"/>
+    <path d="M 130 155 Q 170 135 210 155"/>
+    <path d="M 80 170 Q 110 160 140 170"/>
+  </g>
+  <!-- Polar CO2 ice caps -->
+  <ellipse cx="128" cy="60" rx="65" ry="15" fill="#f2e8e4" opacity="0.8"/>
+  <ellipse cx="128" cy="196" rx="65" ry="15" fill="#f2e8e4" opacity="0.8"/>
+  <!-- Lander with heatshield -->
+  <g transform="translate(128, 90)">
+    <!-- Heatshield (ablative cone) -->
+    <path d="M -45 30 L 0 -20 L 45 30 Z" fill="#451a03" stroke="#ef4444" stroke-width="2"/>
+    <path d="M -40 28 L 0 -18 L 40 28 Z" fill="#5c1f04" opacity="0.6"/>
+    <!-- Ablative texture -->
+    <g stroke="#dc2626" stroke-width="0.8" opacity="0.4">
+      <line x1="-35" y1="25" x2="-30" y2="30"/>
+      <line x1="-20" y1="20" x2="-15" y2="25"/>
+      <line x1="0" y1="15" x2="5" y2="20"/>
+      <line x1="25" y1="22" x2="30" y2="27"/>
+      <line x1="38" y1="28" x2="35" y2="24"/>
+    </g>
+    <!-- Descent stage under heatshield -->
+    <ellipse cx="0" cy="35" rx="30" ry="10" fill="#cbd5e1" stroke="#f59e0b" stroke-width="2"/>
+    <rect x="-28" y="30" width="56" height="20" fill="#94a3b8" stroke="#f59e0b" stroke-width="1.5"/>
+    <!-- Landing legs (4) -->
+    <g stroke="#f59e0b" stroke-width="3" stroke-linecap="round" fill="none">
+      <path d="M -35 40 Q -50 65 -50 80"/>
+      <path d="M 35 40 Q 50 65 50 80"/>
+      <path d="M -20 40 Q -15 65 -5 80"/>
+      <path d="M 20 40 Q 15 65 5 80"/>
+    </g>
+    <!-- Leg pads -->
+    <g fill="#f59e0b">
+      <ellipse cx="-50" cy="82" rx="8" ry="3"/>
+      <ellipse cx="50" cy="82" rx="8" ry="3"/>
+      <ellipse cx="-5" cy="82" rx="8" ry="3"/>
+      <ellipse cx="5" cy="82" rx="8" ry="3"/>
+    </g>
+    <!-- Ascent stage -->
+    <rect x="-18" y="-10" width="36" height="40" rx="4" fill="#cbd5e1" stroke="#f59e0b" stroke-width="2"/>
+    <rect x="-14" y="-6" width="28" height="32" rx="2" fill="#94a3b8"/>
+    <!-- RCS thrusters -->
+    <g fill="#fb923c">
+      <rect x="-18" y="0" width="6" height="4" rx="1"/>
+      <rect x="12" y="0" width="6" height="4" rx="1"/>
+      <rect x="-18" y="20" width="6" height="4" rx="1"/>
+      <rect x="12" y="20" width="6" height="4" rx="1"/>
+    </g>
+    <!-- Cockpit window -->
+    <ellipse cx="0" cy="0" rx="8" ry="6" fill="#38bdf8" opacity="0.6" stroke="#22d3ee" stroke-width="1.5"/>
+    <!-- High-gain antenna -->
+    <line x1="0" y1="-10" x2="0" y2="-25" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="0" cy="-27" r="5" fill="#fb923c" stroke="#facc15" stroke-width="1.5"/>
+    <!-- RTG -->
+    <rect x="22" y="10" width="12" height="25" rx="2" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5"/>
+    <g fill="#fb923c" stroke="#facc15" stroke-width="1">
+      <rect x="21" y="12" width="14" height="4" rx="1"/>
+      <rect x="21" y="18" width="14" height="4" rx="1"/>
+      <rect x="21" y="24" width="14" height="4" rx="1"/>
+    </g>
+  </g>
+  <!-- Orbital ring -->
+  <ellipse cx="128" cy="128" rx="100" ry="30" fill="none" stroke="#fb923c" stroke-width="2" opacity="0.6" stroke-dasharray="10,8"/>
+  <!-- Phobos/Deimos hints -->
+  <circle cx="80" cy="40" r="3" fill="#64748b" opacity="0.7"/>
+  <circle cx="190" cy="35" r="2" fill="#64748b" opacity="0.5"/>
+  <!-- Mission text -->
+  <text x="128" y="220" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#fed7aa" letter-spacing="1.5">MARS LANDING</text>
+  <text x="128" y="235" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" font-weight="500" fill="#fdba74">ARES ASTROBIOLOGY ROVER</text>
+</svg>
