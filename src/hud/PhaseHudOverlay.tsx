@@ -81,6 +81,7 @@ export const PhaseHudOverlay: React.FC = () => {
   const applyRecommendedLoadout = useMissionStore((s) => s.applyRecommendedLoadout);
   const rolloutToGround = useMissionStore((s) => s.rolloutToGround);
   const backToHangar = useMissionStore((s) => s.backToHangar);
+  const backToObjectiveSelect = useMissionStore((s) => s.backToObjectiveSelect);
   const toggleStation = useMissionStore((s) => s.toggleStation);
   const setCommsBand = useMissionStore((s) => s.setCommsBand);
   const setPlannedLifetime = useMissionStore((s) => s.setPlannedLifetime);
@@ -344,6 +345,15 @@ export const PhaseHudOverlay: React.FC = () => {
             onClick={applyRecommendedLoadout}
           >
             KAP AUTO-ENGINEER
+          </button>
+
+          <button
+            type="button"
+            data-testid="back-to-objective-btn"
+            className="secondary-cta-btn"
+            onClick={backToObjectiveSelect}
+          >
+            ← BACK TO MISSION SELECT
           </button>
 
           <button

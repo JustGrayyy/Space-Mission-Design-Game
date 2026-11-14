@@ -89,6 +89,7 @@ export interface MissionStoreState {
   applyRecommendedLoadout: () => void;
   rolloutToGround: () => void;
   backToHangar: () => void;
+  backToObjectiveSelect: () => void;
 
   // Ground Segment Actions
   toggleStation: (stationId: string) => void;
@@ -306,6 +307,16 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
     set({
       phase: 'HANGAR',
       activeSnapCategory: 'structure',
+    });
+  },
+
+  backToObjectiveSelect: () => {
+    set({
+      phase: 'OBJECTIVE_SELECT',
+      activeSnapCategory: 'structure',
+      spacecraft: { ...EMPTY_SPACECRAFT },
+      coupledMetrics: null,
+      hoveredCandidate: null,
     });
   },
 

@@ -249,13 +249,13 @@ body,
   position: fixed;
   top: 56px;
   left: 14px;
-  width: 360px;
+  width: 480px;
   max-width: calc(100vw - 28px);
   z-index: 18;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: flex-start;
-  padding: 10px 12px;
+  padding: 14px 16px;
   border-radius: 10px;
   background: rgba(6, 12, 26, 0.8);
   backdrop-filter: blur(10px);
@@ -273,8 +273,8 @@ body,
 }
 
 .kap-avatar-wrap {
-  width: 54px;
-  height: 54px;
+  width: 64px;
+  height: 64px;
   flex-shrink: 0;
 }
 
@@ -292,21 +292,21 @@ body,
 .kap-header-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .kap-name {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   color: #7dd3fc;
 }
 
 .kap-mood-pill {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
-  padding: 1px 5px;
+  padding: 2px 6px;
   border: 1px solid;
   border-radius: 4px;
   letter-spacing: 0.06em;
@@ -317,17 +317,17 @@ body,
   background: rgba(56, 189, 248, 0.16);
   border: 1px solid rgba(56, 189, 248, 0.45);
   color: #bae6fd;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
-  padding: 2px 6px;
+  padding: 3px 7px;
   border-radius: 4px;
   cursor: pointer;
 }
 
 .kap-message {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.38;
+  font-size: 14px;
+  line-height: 1.42;
   color: #f1f5f9;
 }
 
