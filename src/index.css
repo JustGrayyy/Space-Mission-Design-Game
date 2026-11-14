@@ -709,6 +709,13 @@ body,
   gap: 8px;
 }
 
+.hangar-action-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 .part-inspector-bar {
   font-size: 12px;
   color: #e0f2fe;

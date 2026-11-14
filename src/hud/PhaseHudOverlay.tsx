@@ -331,33 +331,6 @@ export const PhaseHudOverlay: React.FC = () => {
 
           <button
             type="button"
-            data-testid="open-guide-btn"
-            className="secondary-hud-btn guide-btn"
-            onClick={openTutorial}
-          >
-            📖 HOW TO WIN GUIDE
-          </button>
-
-          <button
-            type="button"
-            data-testid="kap-auto-engineer-btn"
-            className="secondary-hud-btn"
-            onClick={applyRecommendedLoadout}
-          >
-            KAP AUTO-ENGINEER
-          </button>
-
-          <button
-            type="button"
-            data-testid="back-to-objective-btn"
-            className="secondary-cta-btn"
-            onClick={backToObjectiveSelect}
-          >
-            ← BACK TO MISSION SELECT
-          </button>
-
-          <button
-            type="button"
             data-testid="rollout-ground-btn"
             className={`primary-cta-btn ${
               val.isLaunchable ? 'ready' : val.isComplete ? 'warn' : ''
@@ -375,6 +348,36 @@ export const PhaseHudOverlay: React.FC = () => {
 
         {/* Bottom Dock: Active Slot Parts + 8 Subsystem Slots */}
         <div className="hangar-bottom-dock">
+          {/* Hangar Action Buttons */}
+          <div className="hangar-action-buttons">
+            <button
+              type="button"
+              data-testid="back-to-objective-btn"
+              className="secondary-cta-btn"
+              onClick={backToObjectiveSelect}
+            >
+              ← BACK TO MISSION SELECT
+            </button>
+
+            <button
+              type="button"
+              data-testid="open-guide-btn"
+              className="secondary-hud-btn guide-btn"
+              onClick={openTutorial}
+            >
+              📖 HOW TO WIN GUIDE
+            </button>
+
+            <button
+              type="button"
+              data-testid="kap-auto-engineer-btn"
+              className="secondary-hud-btn"
+              onClick={applyRecommendedLoadout}
+            >
+              KAP AUTO-ENGINEER
+            </button>
+          </div>
+
           {inspectedOpt && (
             <div className="part-inspector-bar">
               <strong>{inspectedOpt.name}:</strong> {inspectedOpt.desc}
