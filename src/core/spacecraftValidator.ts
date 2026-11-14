@@ -184,6 +184,16 @@ export function validateSpacecraft(
         realisticMessage: `High eclipse Depth-of-Discharge (>80% DoD); consider larger battery bank for margin.`,
       });
     }
+  } else if (power?.isSolar && requiredEclipseWh > 0) {
+    // Solar-powered craft without a battery - will blackout in eclipse
+    conflicts.push({
+      id: 'battery-missing-for-solar',
+      severity: 'CRITICAL',
+      resource: 'power',
+      affectedCategory: 'battery',
+      beginnerMessage: `Solar power selected but no battery equipped — spacecraft will lose all power in ${mission.eclipseDurationSec}s shadow!`,
+      realisticMessage: `Solar-only configuration with ${requiredEclipseWh.toFixed(1)} Wh eclipse demand has zero energy storage; battery required.`,
+    });
   }
 
   // 4. Computer checks

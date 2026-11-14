@@ -476,6 +476,14 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
       activeSnapCategory: 'structure',
       flight: null,
       debrief: null,
+      flightControls: {
+        throttle: 0,
+        pitchInput: 0,
+        yawInput: 0,
+        autoGuidance: true,
+        autoStage: true,
+        stageRequested: false,
+      },
     });
   },
 

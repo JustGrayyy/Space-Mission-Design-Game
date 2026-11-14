@@ -594,6 +594,76 @@ export class FlightScene implements SceneController {
   }
 
   dispose(): void {
+    // Clean up spent boosters
+    for (const sb of this.spentBoosters) {
+      this.root.remove(sb.mesh);
+      disposeObject3D(sb.mesh);
+    }
+    this.spentBoosters = [];
+
+    // Clean up DSN pool visuals
+    for (const vis of this.dsnPool.values()) {
+      this.dsnConesGroup.remove(vis.dot);
+      this.dsnConesGroup.remove(vis.cone);
+      this.downlinkLinesGroup.remove(vis.beam);
+      disposeObject3D(vis.dot);
+      disposeObject3D(vis.cone);
+      disposeObject3D(vis.beam);
+      vis.dotMat.dispose();
+      vis.coneMat.dispose();
+      vis.beam.geometry.dispose();
+      const beamMat = vis.beam.material;
+      if (Array.isArray(beamMat)) {
+        beamMat.forEach((m) => m.dispose());
+      } else {
+        beamMat.dispose();
+      }
+    }
+    this.dsnPool.clear();
+
+    // Clean up craft visual if not already disposed via root
+    if (this.craftVisual) {
+      this.craftPivot.remove(this.craftVisual);
+      disposeObject3D(this.craftVisual);
+      this.craftVisual = null;
+    }
+
+    // Clean up orbit line
+    this.root.remove(this.orbitLine);
+    this.orbitLine.geometry.dispose();
+    const orbitMat = this.orbitLine.material;
+    if (Array.isArray(orbitMat)) {
+      orbitMat.forEach((m) => m.dispose());
+    } else {
+      orbitMat.dispose();
+    }
+
+    // Clean up AP/PE markers
+    this.root.remove(this.apMarker);
+    this.root.remove(this.peMarker);
+    this.apMarker.geometry.dispose();
+    this.peMarker.geometry.dispose();
+    (this.apMarker.material as THREE.Material).dispose();
+    (this.peMarker.material as THREE.Material).dispose();
+
+    // Clean up sensor cone
+    this.root.remove(this.sensorCone);
+    this.sensorCone.geometry.dispose();
+    (this.sensorCone.material as THREE.Material).dispose();
+
+    // Clean up plume (has its own meshes with materials)
+    if (this.plume) {
+      this.craftPivot.remove(this.plume);
+      disposeObject3D(this.plume);
+    }
+
+    // Clean up DSN groups
+    this.root.remove(this.dsnConesGroup);
+    this.root.remove(this.downlinkLinesGroup);
+    disposeObject3D(this.dsnConesGroup);
+    disposeObject3D(this.downlinkLinesGroup);
+
+    // Finally remove and dispose root (planets, shadows, pad tower, starfield, etc.)
     this.scene.remove(this.root);
     disposeObject3D(this.root);
   }

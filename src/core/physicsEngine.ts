@@ -72,7 +72,7 @@ export function vecLen(a: Vec3): number {
 
 export function vecNorm(a: Vec3): Vec3 {
   const l = vecLen(a);
-  if (l < 1e-9) return { x: 1, y: 0, z: 0 };
+  if (l < 1e-9) return { x: 0, y: 0, z: 0 };
   return { x: a.x / l, y: a.y / l, z: a.z / l };
 }
 
@@ -466,6 +466,7 @@ export function stepFlightSimulation(
   let stage1PropKg = prevState.stage1PropKg;
   let stage2PropKg = prevState.stage2PropKg;
   let batteryWh = prevState.batteryWh;
+  const batteryMaxWh = prevState.batteryMaxWh;
   let onboardDataMb = prevState.onboardDataMb;
   let deliveredDataMb = prevState.deliveredDataMb;
   let droppedDataMb = prevState.droppedDataMb;
@@ -778,8 +779,8 @@ export function stepFlightSimulation(
     if (missionId === 'MARS_LANDING' && marsDist <= MARS_SOI_M && !landedOnTarget) {
       const marsAlt = marsDist - MARS_RADIUS_M;
       const relMarsSpeed = vecLen(relMarsVel);
+      // Mars entry check - only applies when actually in atmosphere
       if (marsAlt >= 0 && marsAlt < MARS_ATM_TOP_M) {
-        // Mars entry check!
         if (relMarsSpeed > 260 && !thermal?.heatShield) {
           status = 'FAILED';
           failureReason = 'Burned up during Mars atmospheric entry — missing PICA-X heatshield!';
@@ -842,7 +843,7 @@ export function stepFlightSimulation(
 
     // Orbit entry detection
     const postOrb = computeOrbitalElements(pos, vel);
-    if (status === 'ASCENT' && postOrb.periapsisAltM >= EARTH_ATM_TOP_M + 5_000 && newAlt >= 85_000) {
+    if (status === 'ASCENT' && postOrb.periapsisAltM >= EARTH_ATM_TOP_M + 5_000) {
       status = 'ORBIT';
       enteredOrbitAtSec = enteredOrbitAtSec ?? elapsed;
       if (missionId === 'EARTH_OBSERVATION') {
@@ -955,9 +956,9 @@ export function stepFlightSimulation(
     const netPowerW = powerGenW - baseDrawW;
     batteryWh = Math.max(
       0,
-      Math.min(prevState.batteryMaxWh, batteryWh + (netPowerW * h) / 3600)
+      Math.min(batteryMaxWh, batteryWh + (netPowerW * h) / 3600)
     );
-    const battPct = (batteryWh / Math.max(1, prevState.batteryMaxWh)) * 100;
+    const battPct = (batteryWh / Math.max(1, batteryMaxWh)) * 100;
     if (battPct < minBatteryPct) minBatteryPct = battPct;
 
     lastInEclipse = inEclipse;
