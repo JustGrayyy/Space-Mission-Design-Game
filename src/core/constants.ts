@@ -3,6 +3,7 @@ import type {
   CommsBandSpec,
   GroundConfig,
   GroundStationSpec,
+  LaunchSite,
   LaunchVehicle,
   MissionId,
   MissionSpec,
@@ -712,6 +713,98 @@ export const LAUNCH_VEHICLES: LaunchVehicle[] = [
 export const LAUNCHERS_BY_ID: Record<string, LaunchVehicle> = Object.fromEntries(
   LAUNCH_VEHICLES.map((l) => [l.id, l])
 );
+
+// Facility coordinates: NASA launch-services facility pages plus operator site references.
+// https://www.nasa.gov/kennedy/launch-services-program/
+export const LAUNCH_SITES: LaunchSite[] = [
+  {
+    id: 'kennedy-lc39',
+    name: 'Kennedy Space Center LC-39',
+    operator: 'NASA',
+    country: 'United States',
+    latDeg: 28.6084,
+    lonDeg: -80.6043,
+    description: 'Artemis and flagship NASA launch complex on Florida\'s Space Coast.',
+  },
+  {
+    id: 'cape-canaveral',
+    name: 'Cape Canaveral SFS',
+    operator: 'US Space Force / NASA',
+    country: 'United States',
+    latDeg: 28.3922,
+    lonDeg: -80.6077,
+    description: 'Eastern Range launch site supporting NASA science missions.',
+  },
+  {
+    id: 'vandenberg',
+    name: 'Vandenberg SFB',
+    operator: 'US Space Force / NASA',
+    country: 'United States',
+    latDeg: 34.742,
+    lonDeg: -120.5724,
+    description: 'Pacific coast range optimized for polar and sun-synchronous orbits.',
+  },
+  {
+    id: 'wallops',
+    name: 'Wallops Flight Facility',
+    operator: 'NASA',
+    country: 'United States',
+    latDeg: 37.94,
+    lonDeg: -75.466,
+    description: 'NASA Virginia launch range for research and small satellite missions.',
+  },
+  {
+    id: 'guiana-space-centre',
+    name: 'Guiana Space Centre',
+    operator: 'ESA / CNES',
+    country: 'French Guiana',
+    latDeg: 5.239,
+    lonDeg: -52.768,
+    description: 'Near-equatorial European spaceport and NASA partner launch range.',
+  },
+  {
+    id: 'tanegashima',
+    name: 'Tanegashima Space Center',
+    operator: 'JAXA',
+    country: 'Japan',
+    latDeg: 30.401,
+    lonDeg: 130.976,
+    description: 'Japan\'s primary orbital launch center and NASA science partner.',
+  },
+  {
+    id: 'satish-dhawan',
+    name: 'Satish Dhawan Space Centre',
+    operator: 'ISRO',
+    country: 'India',
+    latDeg: 13.719,
+    lonDeg: 80.23,
+    description: 'Indian east-coast launch center serving international missions.',
+  },
+  {
+    id: 'baikonur',
+    name: 'Baikonur Cosmodrome',
+    operator: 'Roscosmos',
+    country: 'Kazakhstan',
+    latDeg: 45.92,
+    lonDeg: 63.342,
+    description: 'Historic human-spaceflight range used by international partners.',
+  },
+  {
+    id: 'woomera',
+    name: 'Woomera Range Complex',
+    operator: 'Australian Space Agency',
+    country: 'Australia',
+    latDeg: -31.15,
+    lonDeg: 136.8,
+    description: 'Southern Hemisphere range supporting international launch campaigns.',
+  },
+];
+
+export const LAUNCH_SITES_BY_ID: Record<string, LaunchSite> = Object.fromEntries(
+  LAUNCH_SITES.map((site) => [site.id, site])
+);
+
+export const DEFAULT_LAUNCH_SITE_ID = 'kennedy-lc39';
 
 export const GROUND_STATIONS: GroundStationSpec[] = [
   {

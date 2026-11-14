@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import {
+  DEFAULT_LAUNCH_SITE_ID,
+  LAUNCH_SITES_BY_ID,
   MISSIONS,
   RECOMMENDED_GROUND,
   RECOMMENDED_LOADOUTS,
@@ -57,6 +59,7 @@ export interface MissionStoreState {
   difficulty: DifficultyMode;
   selectedObjective: TopObjectiveChoice | null;
   missionId: MissionId;
+  launchSiteId: string;
   exploreSubChoiceOpen: boolean;
   spacecraft: SpacecraftConfig;
   activeSnapCategory: SubsystemCategory | null;
@@ -88,6 +91,8 @@ export interface MissionStoreState {
   clearSlot: (category: SubsystemCategory) => void;
   applyRecommendedLoadout: () => void;
   rolloutToGround: () => void;
+  selectLaunchSite: (siteId: string) => void;
+  confirmLaunchSite: () => void;
   backToHangar: () => void;
   backToObjectiveSelect: () => void;
 
@@ -139,6 +144,7 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
   difficulty: 'BEGINNER',
   selectedObjective: null,
   missionId: 'EARTH_OBSERVATION',
+  launchSiteId: DEFAULT_LAUNCH_SITE_ID,
   exploreSubChoiceOpen: false,
   spacecraft: { ...EMPTY_SPACECRAFT },
   activeSnapCategory: 'structure',
@@ -298,9 +304,15 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
   },
 
   rolloutToGround: () => {
-    set({
-      phase: 'GROUND_SEGMENT',
-    });
+    set({ phase: 'LAUNCH_SITE' });
+  },
+
+  selectLaunchSite: (siteId) => {
+    if (LAUNCH_SITES_BY_ID[siteId]) set({ launchSiteId: siteId });
+  },
+
+  confirmLaunchSite: () => {
+    set({ phase: 'GROUND_SEGMENT' });
   },
 
   backToHangar: () => {
@@ -379,13 +391,14 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
   },
 
   greenlightLiftoff: () => {
-    const { missionId, spacecraft, ground, difficulty, coupledMetrics } = get();
+    const { missionId, spacecraft, ground, difficulty, coupledMetrics, launchSiteId } = get();
     const assist = difficulty === 'BEGINNER';
     const initialFlight = createInitialFlightState(
       missionId,
       spacecraft,
       ground,
-      assist
+      assist,
+      launchSiteId
     );
     set({
       phase: 'FLIGHT',

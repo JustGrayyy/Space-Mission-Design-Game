@@ -811,7 +811,8 @@ body,
   background: #ef4444;
 }
 
-/* --- GROUND SEGMENT CONSOLE --- */
+/* --- LAUNCH SITE & GROUND SEGMENT CONSOLES --- */
+.launch-site-console,
 .ground-console {
   position: fixed;
   top: 58px;
@@ -832,6 +833,60 @@ body,
   font-size: 11px;
   color: #94a3b8;
   margin-top: -4px;
+}
+
+.launch-site-selected {
+  padding: 9px 10px;
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  border-radius: 7px;
+  background: rgba(6, 78, 59, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: #d1fae5;
+  font-size: 11px;
+}
+
+.launch-site-selected p {
+  margin: 3px 0 0;
+  color: #a7f3d0;
+  line-height: 1.35;
+}
+
+.launch-site-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  max-height: 270px;
+  overflow-y: auto;
+}
+
+.launch-site-chip {
+  padding: 7px 8px;
+  text-align: left;
+  border-radius: 6px;
+  background: rgba(15, 28, 52, 0.72);
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.launch-site-chip strong,
+.launch-site-chip span {
+  display: block;
+}
+
+.launch-site-chip span {
+  margin-top: 2px;
+  color: #93c5fd;
+  font-size: 9px;
+}
+
+.launch-site-chip.active {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: #34d399;
+  color: #fff;
 }
 
 .console-section-label {
@@ -1050,6 +1105,16 @@ body,
   display: flex;
   flex-direction: column;
   gap: 7px;
+}
+
+.manual-steer-hint {
+  padding: 5px 8px;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  border-radius: 5px;
+  color: #fde68a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
 .flight-controls-row {

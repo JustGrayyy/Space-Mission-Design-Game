@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   COMMS_BANDS,
   GROUND_STATIONS,
+  LAUNCH_SITES,
   LAUNCH_VEHICLES,
   MISSIONS,
   SPACECRAFT_PARTS,
@@ -61,6 +62,7 @@ export const PhaseHudOverlay: React.FC = () => {
   const difficulty = useMissionStore((s) => s.difficulty);
   const selectedObjective = useMissionStore((s) => s.selectedObjective);
   const missionId = useMissionStore((s) => s.missionId);
+  const launchSiteId = useMissionStore((s) => s.launchSiteId);
   const exploreSubChoiceOpen = useMissionStore((s) => s.exploreSubChoiceOpen);
   const spacecraft = useMissionStore((s) => s.spacecraft);
   const activeSnapCategory = useMissionStore((s) => s.activeSnapCategory);
@@ -80,6 +82,8 @@ export const PhaseHudOverlay: React.FC = () => {
   const equipPart = useMissionStore((s) => s.equipPart);
   const applyRecommendedLoadout = useMissionStore((s) => s.applyRecommendedLoadout);
   const rolloutToGround = useMissionStore((s) => s.rolloutToGround);
+  const selectLaunchSite = useMissionStore((s) => s.selectLaunchSite);
+  const confirmLaunchSite = useMissionStore((s) => s.confirmLaunchSite);
   const backToHangar = useMissionStore((s) => s.backToHangar);
   const backToObjectiveSelect = useMissionStore((s) => s.backToObjectiveSelect);
   const toggleStation = useMissionStore((s) => s.toggleStation);
@@ -469,7 +473,53 @@ export const PhaseHudOverlay: React.FC = () => {
     );
   }
 
-  // --- PHASE 3: GROUND SEGMENT ---
+  // --- PHASE 3: LAUNCH SITE ---
+  if (phase === 'LAUNCH_SITE') {
+    const selectedSite = LAUNCH_SITES.find((site) => site.id === launchSiteId);
+    return (
+      <div className="hud-layer pointer-pass" data-testid="launch-site-hud">
+        <div className="launch-site-console">
+          <div className="reticle-kicker">PHASE 3 // LAUNCH SITE SELECTION</div>
+          <div className="console-subhint">Click a marker on Earth or choose a launch range below</div>
+          <div className="launch-site-selected" data-testid="selected-launch-site">
+            <strong>{selectedSite?.name}</strong>
+            <span>{selectedSite?.operator} · {selectedSite?.country}</span>
+            <span>{selectedSite?.latDeg.toFixed(3)}°, {selectedSite?.lonDeg.toFixed(3)}°</span>
+            <p>{selectedSite?.description}</p>
+          </div>
+          <div className="launch-site-list">
+            {LAUNCH_SITES.map((site) => (
+              <button
+                key={site.id}
+                type="button"
+                data-testid={`launch-site-btn-${site.id}`}
+                className={`launch-site-chip ${site.id === launchSiteId ? 'active' : ''}`}
+                onClick={() => selectLaunchSite(site.id)}
+              >
+                <strong>{site.name}</strong>
+                <span>{site.operator} · {site.country}</span>
+              </button>
+            ))}
+          </div>
+          <div className="ground-cta-row">
+            <button type="button" className="secondary-hud-btn" onClick={backToHangar}>
+              BACK TO VAB
+            </button>
+            <button
+              type="button"
+              data-testid="confirm-launch-site-btn"
+              className="primary-cta-btn"
+              onClick={confirmLaunchSite}
+            >
+              CONTINUE TO GROUND CONTROL
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- PHASE 4: GROUND SEGMENT ---
   if (phase === 'GROUND_SEGMENT') {
     const ge = evaluateGroundSegment(missionId, spacecraft, ground, difficulty);
     const bandIds: CommsBandId[] = ['S_BAND', 'X_BAND', 'KA_BAND'];
@@ -674,6 +724,9 @@ export const PhaseHudOverlay: React.FC = () => {
             >
               {flightControls.autoGuidance ? 'AUTO PILOT: ON' : 'MANUAL STEER'}
             </button>
+            {!flightControls.autoGuidance && difficulty === 'REALISTIC' && (
+              <div className="manual-steer-hint">MANUAL VECTOR: W/S pitch · A/D yaw · 1× recommended</div>
+            )}
             <button
               type="button"
               data-testid="toggle-autostage-btn"

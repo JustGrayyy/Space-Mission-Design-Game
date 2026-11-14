@@ -5,6 +5,7 @@ import {
   EARTH_RADIUS_M,
   G0,
   LAUNCHERS_BY_ID,
+  LAUNCH_SITES_BY_ID,
   RECOMMENDED_GROUND,
   RECOMMENDED_LOADOUTS,
   SUN_DIRECTION,
@@ -14,6 +15,7 @@ import {
   computeBoilOffRate,
   createInitialFlightState,
   getVisibleGroundStations,
+  getSurfacePosition,
   isInEclipseShadow,
   stepFlightSimulation,
   seededRandom,
@@ -40,6 +42,55 @@ describe('physicsEngine core mechanics', () => {
     expect(val.mass.stage2DeltaVMs).toBeCloseTo(expectedDv2, 3);
     expect(val.mass.totalDeltaVMs).toBeCloseTo(expectedDv1 + expectedDv2, 3);
     expect(val.mass.totalDeltaVMs).toBeGreaterThan(2850);
+  });
+
+  it('starts from selected launch site surface with outward heading', () => {
+    const cfg = RECOMMENDED_LOADOUTS.EARTH_OBSERVATION;
+    const ground = RECOMMENDED_GROUND.EARTH_OBSERVATION;
+    const site = LAUNCH_SITES_BY_ID.vandenberg;
+    const state = createInitialFlightState('EARTH_OBSERVATION', cfg, ground, false, site.id);
+    const expected = getSurfacePosition(site.latDeg, site.lonDeg);
+
+    expect(state.position.x).toBeCloseTo(expected.x, 6);
+    expect(state.position.y).toBeCloseTo(expected.y, 6);
+    expect(state.position.z).toBeCloseTo(expected.z, 6);
+    expect(state.heading.x).toBeCloseTo(expected.x / EARTH_RADIUS_M, 6);
+    expect(state.heading.y).toBeCloseTo(expected.y / EARTH_RADIUS_M, 6);
+    expect(state.heading.z).toBeCloseTo(expected.z / EARTH_RADIUS_M, 6);
+  });
+
+  it('applies bounded local pitch and yaw steering from a vertical launch', () => {
+    const cfg = RECOMMENDED_LOADOUTS.EARTH_OBSERVATION;
+    const ground = RECOMMENDED_GROUND.EARTH_OBSERVATION;
+    let state = createInitialFlightState('EARTH_OBSERVATION', cfg, ground, false, 'vandenberg');
+
+    state = stepFlightSimulation(
+      state,
+      'EARTH_OBSERVATION',
+      cfg,
+      ground,
+      { throttle: 1, pitchInput: 1, yawInput: 0, autoGuidance: false },
+      0.5,
+      'REALISTIC'
+    );
+    const pitched = { ...state.heading };
+    const radial = getSurfacePosition(LAUNCH_SITES_BY_ID.vandenberg.latDeg, LAUNCH_SITES_BY_ID.vandenberg.lonDeg);
+    const radialUnit = { x: radial.x / EARTH_RADIUS_M, y: radial.y / EARTH_RADIUS_M, z: radial.z / EARTH_RADIUS_M };
+    expect(Math.abs(pitched.x * radialUnit.x + pitched.y * radialUnit.y + pitched.z * radialUnit.z)).toBeLessThan(1);
+
+    state = stepFlightSimulation(
+      state,
+      'EARTH_OBSERVATION',
+      cfg,
+      ground,
+      { throttle: 1, pitchInput: 0, yawInput: 1, autoGuidance: false },
+      0.5,
+      'REALISTIC'
+    );
+    expect(state.heading.x).not.toBeCloseTo(pitched.x, 6);
+    expect(state.heading.y).not.toBeCloseTo(pitched.y, 6);
+    expect(Number.isFinite(state.orbitalElements.altitudeM)).toBe(true);
+    expect(Math.hypot(state.heading.x, state.heading.y, state.heading.z)).toBeCloseTo(1, 6);
   });
 
   it('maintains circular orbit stability above atmosphere with Velocity-Verlet', () => {

@@ -94,7 +94,17 @@ test.describe('Orbital Architect 3D End-to-End Campaign', () => {
     await expect(rolloutBtn).toBeEnabled();
     await rolloutBtn.click();
 
-    // 5. Phase 3: Ground Segment - switch band & station, verify greenlight
+    // 5. Phase 3: Launch site then Ground Segment - switch band & station, verify greenlight
+    await expect(page.getByTestId('launch-site-hud')).toBeVisible();
+    await page.getByTestId('launch-site-btn-vandenberg').click();
+    await expect(page.getByTestId('selected-launch-site')).toContainText('Vandenberg');
+    const launchSiteId = await page.evaluate(
+      () =>
+        (window as unknown as { __MISSION_STORE__: { getState: () => { launchSiteId: string } } })
+          .__MISSION_STORE__.getState().launchSiteId
+    );
+    expect(launchSiteId).toBe('vandenberg');
+    await page.getByTestId('confirm-launch-site-btn').click();
     await expect(page.getByTestId('ground-segment-hud')).toBeVisible();
 
     // Default S_BAND should trigger buffer overflow alert for 28 Mbps camera
@@ -107,8 +117,15 @@ test.describe('Orbital Architect 3D End-to-End Campaign', () => {
     await expect(liftoffBtn).toBeEnabled();
     await liftoffBtn.click();
 
-    // 6. Phase 4: Flight - ignite, warp, verify ascent/staging/orbit & reach DEBRIEF
+    // 6. Phase 5: Flight starts at chosen site, then reaches debrief.
     await expect(page.getByTestId('flight-hud')).toBeVisible();
+    const launchPosition = await page.evaluate(
+      () =>
+        (window as unknown as { __MISSION_STORE__: { getState: () => { flight: { position: { x: number; y: number; z: number } } | null } } })
+          .__MISSION_STORE__.getState().flight?.position
+    );
+    expect(launchPosition).not.toBeNull();
+    expect(launchPosition!.x).not.toBeCloseTo(600_000, 2);
     await page.getByTestId('ignite-launch-btn').click();
     await page.getByTestId('warp-btn-500').click();
 

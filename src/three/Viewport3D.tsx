@@ -5,10 +5,11 @@ import { useMissionStore } from '../store/useMissionStore';
 import { FlightScene } from './scenes/FlightScene';
 import { GroundGlobeScene } from './scenes/GroundGlobeScene';
 import { HangarScene } from './scenes/HangarScene';
+import { LaunchSiteScene } from './scenes/LaunchSiteScene';
 import type { SceneController } from './scenes/SceneController';
 import { SolarSelectScene } from './scenes/SolarSelectScene';
 
-type SceneKind = 'SOLAR' | 'HANGAR' | 'GROUND' | 'FLIGHT';
+type SceneKind = 'SOLAR' | 'HANGAR' | 'LAUNCH_SITE' | 'GROUND' | 'FLIGHT';
 
 function phaseToSceneKind(phase: GamePhase): SceneKind {
   switch (phase) {
@@ -17,6 +18,8 @@ function phaseToSceneKind(phase: GamePhase): SceneKind {
       return 'SOLAR';
     case 'HANGAR':
       return 'HANGAR';
+    case 'LAUNCH_SITE':
+      return 'LAUNCH_SITE';
     case 'GROUND_SEGMENT':
       return 'GROUND';
     case 'FLIGHT':
@@ -51,6 +54,7 @@ export const Viewport3D: React.FC = () => {
     let nextController: SceneController;
     if (targetKind === 'SOLAR') nextController = new SolarSelectScene();
     else if (targetKind === 'HANGAR') nextController = new HangarScene();
+    else if (targetKind === 'LAUNCH_SITE') nextController = new LaunchSiteScene();
     else if (targetKind === 'GROUND') nextController = new GroundGlobeScene();
     else nextController = new FlightScene();
 
@@ -98,9 +102,11 @@ export const Viewport3D: React.FC = () => {
         ? new SolarSelectScene()
         : initialKind === 'HANGAR'
           ? new HangarScene()
-          : initialKind === 'GROUND'
-            ? new GroundGlobeScene()
-            : new FlightScene();
+          : initialKind === 'LAUNCH_SITE'
+            ? new LaunchSiteScene()
+            : initialKind === 'GROUND'
+              ? new GroundGlobeScene()
+              : new FlightScene();
     initialController.mount(scene, camera);
     controllerRef.current = initialController;
     sceneKindRef.current = initialKind;

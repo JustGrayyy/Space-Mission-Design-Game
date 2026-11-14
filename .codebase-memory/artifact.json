@@ -1,0 +1,11 @@
+{
+    "schema_version": 2,
+    "commit": "e79a4e10d654af80a602fd63c03a127c76461c00",
+    "indexed_at": "2026-11-14T17:45:18Z",
+    "project": "nasahack",
+    "nodes": 607,
+    "edges": 1556,
+    "original_size": 3473408,
+    "compressed_size": 623058,
+    "compression_level": 9
+}

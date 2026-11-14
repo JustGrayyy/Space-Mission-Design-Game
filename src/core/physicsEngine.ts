@@ -1,5 +1,6 @@
 import {
   COMMS_BANDS,
+  DEFAULT_LAUNCH_SITE_ID,
   DEEP_SPACE_ORBIT_M,
   EARTH_ATM_TOP_M,
   EARTH_MU,
@@ -10,6 +11,7 @@ import {
   G0,
   GROUND_STATIONS_BY_ID,
   LAUNCHERS_BY_ID,
+  LAUNCH_SITES_BY_ID,
   MARS_ANGULAR_RATE,
   MARS_ATM_TOP_M,
   MARS_MU,
@@ -75,6 +77,60 @@ export function vecNorm(a: Vec3): Vec3 {
   const l = vecLen(a);
   if (l < 1e-9) return { x: 0, y: 0, z: 0 };
   return { x: a.x / l, y: a.y / l, z: a.z / l };
+}
+
+export function getSurfacePosition(latDeg: number, lonDeg: number, radiusM: number = EARTH_RADIUS_M): Vec3 {
+  const lat = (latDeg * Math.PI) / 180;
+  const lon = (lonDeg * Math.PI) / 180;
+  return {
+    x: radiusM * Math.cos(lat) * Math.cos(lon),
+    y: radiusM * Math.sin(lat),
+    z: radiusM * Math.cos(lat) * Math.sin(lon),
+  };
+}
+
+function rotateAroundAxis(vector: Vec3, axis: Vec3, angleRad: number): Vec3 {
+  const unitAxis = vecNorm(axis);
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+  return vecAdd(
+    vecAdd(vecScale(vector, cos), vecScale(vecCross(unitAxis, vector), sin)),
+    vecScale(unitAxis, vecDot(unitAxis, vector) * (1 - cos))
+  );
+}
+
+function steerManualAscent(
+  heading: Vec3,
+  up: Vec3,
+  pitchInput: number,
+  yawInput: number,
+  dtSec: number
+): Vec3 {
+  const maxRateRadPerSec = 0.42;
+  const maxDeflectionRad = Math.PI * 0.47;
+  const east = vecNorm({ x: -up.z, y: 0, z: up.x });
+  const fallbackEast = vecLen(east) > 1e-6 ? east : { x: 0, y: 0, z: 1 };
+  const north = vecNorm(vecCross(fallbackEast, up));
+  const horizontal = vecSub(heading, vecScale(up, vecDot(heading, up)));
+  const forward = vecLen(horizontal) > 1e-6 ? vecNorm(horizontal) : fallbackEast;
+  const right = vecNorm(vecCross(up, forward));
+
+  let steered = rotateAroundAxis(heading, right, pitchInput * maxRateRadPerSec * dtSec);
+  steered = rotateAroundAxis(steered, up, yawInput * maxRateRadPerSec * dtSec);
+  steered = vecNorm(steered);
+
+  const verticalComponent = Math.max(-1, Math.min(1, vecDot(steered, up)));
+  const deflection = Math.acos(verticalComponent);
+  if (deflection <= maxDeflectionRad) return steered;
+
+  const steeredHorizontal = vecSub(steered, vecScale(up, verticalComponent));
+  const clampedForward = vecLen(steeredHorizontal) > 1e-6 ? vecNorm(steeredHorizontal) : north;
+  return vecNorm(
+    vecAdd(
+      vecScale(up, Math.cos(maxDeflectionRad)),
+      vecScale(clampedForward, Math.sin(maxDeflectionRad))
+    )
+  );
 }
 
 // --- Celestial Body Ephemerides (in X-Z equatorial plane) ---
@@ -420,7 +476,8 @@ export function createInitialFlightState(
   missionId: MissionId,
   spacecraftConfig: SpacecraftConfig,
   groundConfig: GroundConfig,
-  flightAssistEnabled: boolean = true
+  flightAssistEnabled: boolean = true,
+  launchSiteId: string = DEFAULT_LAUNCH_SITE_ID
 ): FlightState {
   const parts = getSelectedParts(spacecraftConfig);
   const spacecraftDryKg = parts.reduce((s, p) => s + p.massKg, 0);
@@ -439,7 +496,9 @@ export function createInitialFlightState(
   const batteryMaxWh = battery?.capacityWh ?? 180;
   const storageMaxMb = computer?.storageMb ?? 400;
 
-  const startPos: Vec3 = { x: EARTH_RADIUS_M, y: 0, z: 0 };
+  const launchSite = LAUNCH_SITES_BY_ID[launchSiteId] ?? LAUNCH_SITES_BY_ID[DEFAULT_LAUNCH_SITE_ID];
+  const startPos = getSurfacePosition(launchSite.latDeg, launchSite.lonDeg);
+  const startHeading = vecNorm(startPos);
   const startVel: Vec3 = { x: 0, y: 0, z: 0 };
 
   const moon = getMoonState(0);
@@ -448,7 +507,7 @@ export function createInitialFlightState(
   return {
     position: startPos,
     velocity: startVel,
-    heading: { x: 1, y: 0, z: 0 },
+    heading: startHeading,
     throttle: 0,
     activeStageIndex: 0,
     stage1PropKg,
@@ -735,15 +794,15 @@ export function stepFlightSimulation(
     const hasManualSteer =
       Math.abs(controls.pitchInput) > 0.05 || Math.abs(controls.yawInput) > 0.05;
 
-    if (hasManualSteer) {
-      // Manual pitch/yaw adjustment in orbital plane & out-of-plane
-      const pitchStep = controls.pitchInput * 1.2 * h;
-      const yawStep = controls.yawInput * 1.2 * h;
-      heading = vecNorm({
-        x: heading.x + up.x * pitchStep,
-        y: heading.y + yawStep,
-        z: heading.z + up.z * pitchStep,
-      });
+    if (hasManualSteer && status === 'ASCENT') {
+      // Rotate thrust vector around vehicle-local axes, not world axes.
+      heading = steerManualAscent(
+        heading,
+        up,
+        controls.pitchInput,
+        controls.yawInput,
+        h
+      );
     } else if (assistActive && !landedOnTarget) {
       // Flight Assist autopilot per flight phase
       if (status === 'ASCENT') {
@@ -1054,7 +1113,7 @@ export function stepFlightSimulation(
 
       if (mAlt <= 0) {
         const impactSpeed = vecLen(rVel);
-        if (impactSpeed > 28) {
+        if (impactSpeed > 30) {
           status = 'FAILED';
           failureReason = `Lunar crash landing at ${impactSpeed.toFixed(1)} m/s!`;
           pushEvent(events, elapsed, 'CRITICAL', failureReason);

@@ -2,6 +2,7 @@ export type GamePhase =
   | 'TITLE'
   | 'OBJECTIVE_SELECT'
   | 'HANGAR'
+  | 'LAUNCH_SITE'
   | 'GROUND_SEGMENT'
   | 'FLIGHT'
   | 'DEBRIEF';
@@ -118,6 +119,16 @@ export interface GroundStationSpec {
   minElevationDeg: number;
   beginnerDesc: string;
   realisticDesc: string;
+}
+
+export interface LaunchSite {
+  id: string;
+  name: string;
+  operator: string;
+  country: string;
+  latDeg: number;
+  lonDeg: number;
+  description: string;
 }
 
 export interface CommsBandSpec {

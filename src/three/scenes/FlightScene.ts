@@ -3,8 +3,10 @@ import {
   EARTH_ATM_TOP_M,
   EARTH_MU,
   EARTH_RADIUS_M,
+  DEFAULT_LAUNCH_SITE_ID,
   EARTH_ROT_RATE,
   GROUND_STATIONS,
+  LAUNCH_SITES_BY_ID,
   MARS_MU,
   MARS_RADIUS_M,
   MARS_SOI_M,
@@ -21,6 +23,7 @@ import {
   vecSub,
   vecAdd,
   vecScale,
+  getSurfacePosition,
 } from '../../core/physicsEngine';
 import type { SubsystemCategory, Vec3, FlightState } from '../../core/types';
 import { useMissionStore } from '../../store/useMissionStore';
@@ -149,10 +152,14 @@ export class FlightScene implements SceneController {
     this.marsShadow = makeShadow(MARS_RADIUS_M * WORLD_SCALE, 140);
     this.root.add(this.earthShadow, this.moonShadow, this.marsShadow);
 
-    // Launchpad tower at (EARTH_RADIUS_M, 0, 0) pointing radially +X
+    // Launchpad tower shares selected launch site's physical surface normal.
+    const launchSiteId = useMissionStore.getState().launchSiteId;
+    const launchSite = LAUNCH_SITES_BY_ID[launchSiteId] ?? LAUNCH_SITES_BY_ID[DEFAULT_LAUNCH_SITE_ID];
+    const launchPos = getSurfacePosition(launchSite.latDeg, launchSite.lonDeg);
+    const launchNormal = toWorld(launchPos).normalize();
     this.padTower = this.createLaunchpadTower();
-    this.padTower.position.set(EARTH_RADIUS_M * WORLD_SCALE, 0, 0);
-    this.padTower.quaternion.setFromUnitVectors(UP_Y, new THREE.Vector3(1, 0, 0));
+    this.padTower.position.copy(toWorld(launchPos));
+    this.padTower.quaternion.setFromUnitVectors(UP_Y, launchNormal);
     this.root.add(this.padTower);
 
     // Spacecraft Pivot + Exhaust Plume + Sensor Cone
