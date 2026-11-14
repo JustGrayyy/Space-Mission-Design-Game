@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { MISSIONS } from '../core/constants';
 import { evaluateGroundSegment } from '../core/groundSegment';
 import { validateSpacecraft } from '../core/spacecraftValidator';
-import type { EngineeringConflict } from '../core/types';
+import type { CoupledMetrics, EngineeringConflict, MissionSpec } from '../core/types';
 import { useMissionStore } from '../store/useMissionStore';
 
 type KapMood = 'HAPPY' | 'CONCERNED' | 'ALERT';
@@ -15,6 +15,8 @@ export const KapCommsBubble: React.FC = () => {
   const ground = useMissionStore((s) => s.ground);
   const flight = useMissionStore((s) => s.flight);
   const debrief = useMissionStore((s) => s.debrief);
+  const coupledMetrics = useMissionStore((s) => s.coupledMetrics);
+  const launchCoupledMetrics = useMissionStore((s) => s.launchCoupledMetrics);
 
   const [expanded, setExpanded] = useState(false);
 
@@ -24,6 +26,10 @@ export const KapCommsBubble: React.FC = () => {
   let mood: KapMood = 'HAPPY';
   let headline = '';
   let conflicts: EngineeringConflict[] = [];
+  let contextualTip = '';
+
+  // Use coupled metrics for contextual tips
+  const coupled = coupledMetrics ?? launchCoupledMetrics;
 
   if (phase === 'OBJECTIVE_SELECT') {
     mood = 'HAPPY';
@@ -41,6 +47,11 @@ export const KapCommsBubble: React.FC = () => {
         difficulty === 'BEGINNER' ? top.beginnerMessage : top.realisticMessage;
     } else {
       headline = val.kapHeadline;
+    }
+
+    // Contextual engineering tips for HANGAR
+    if (coupled) {
+      contextualTip = getHangarContextualTip(coupled, mission, difficulty);
     }
   } else if (phase === 'GROUND_SEGMENT') {
     const ge = evaluateGroundSegment(missionId, spacecraft, ground, difficulty);
@@ -75,6 +86,11 @@ export const KapCommsBubble: React.FC = () => {
       headline = lastEvt.message;
     } else {
       headline = 'All flight telemetry nominal.';
+    }
+
+    // Contextual tips for FLIGHT
+    if (coupled) {
+      contextualTip = getFlightContextualTip(coupled, flight, mission, difficulty);
     }
   } else if (phase === 'DEBRIEF' && debrief) {
     mood = debrief.outcome === 'SUCCESS' ? 'HAPPY' : 'ALERT';
@@ -167,6 +183,12 @@ export const KapCommsBubble: React.FC = () => {
           {headline}
         </p>
 
+        {contextualTip && (
+          <p className="kap-contextual-tip" style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '0.5rem', fontStyle: 'italic' }}>
+            {contextualTip}
+          </p>
+        )}
+
         {expanded && conflicts.length > 1 && (
           <div className="kap-conflict-list">
             {conflicts.slice(1).map((c) => (
@@ -180,3 +202,74 @@ export const KapCommsBubble: React.FC = () => {
     </aside>
   );
 };
+
+function getHangarContextualTip(coupled: CoupledMetrics, _mission: MissionSpec, difficulty: string): string {
+  const tips: string[] = [];
+
+  // Mars solar flux drop
+  if (coupled.solarDistanceAU > 1.2 && coupled.sunlitGenerationW > 0) {
+    const solarPct = Math.round(coupled.irradianceFactor * 100);
+    if (coupled.netPeakW < 0) {
+      tips.push(
+        difficulty === 'BEGINNER'
+          ? `Mars sunlight is only ${solarPct}% of Earth — solar arrays produce ${Math.round(coupled.sunlitGenerationW)}W here vs ${Math.round(coupled.sunlitGenerationW / coupled.irradianceFactor)}W at Earth. Consider RTG nuclear power.`
+          : `1/r² solar flux at ${coupled.solarDistanceAU.toFixed(2)} AU = ${solarPct}% Earth irradiance. Peak margin ${coupled.netPeakW.toFixed(0)}W — RTG or oversized arrays required.`
+      );
+    }
+  }
+
+  // Cold deep-space heaters draining battery
+  if (coupled.shadowSurvivalHeaterW > 0 && coupled.eclipseEnduranceMin < coupled.requiredEclipseMin * 1.5) {
+    tips.push(
+      difficulty === 'BEGINNER'
+        ? `Deep-space cold requires ${Math.round(coupled.shadowSurvivalHeaterW)}W survival heaters in shadow, draining your battery. Bigger battery or better thermal tier (Tier 3+) reduces heater draw.`
+        : `Shadow survival heaters: ${coupled.shadowSurvivalHeaterW.toFixed(0)}W. Eclipse endurance ${coupled.eclipseEnduranceMin.toFixed(1)}min vs ${coupled.requiredEclipseMin.toFixed(1)}min required. Thermal Tier ${Math.ceil(coupled.radiatorRejectionW / 500)} insufficient for heat rejection.`
+    );
+  }
+
+  // Heavy Tier 4 parts eroding Δv margin
+  if (coupled.deltaVMarginMs < 300 && coupled.payloadToLiftMarginKg < 500) {
+    tips.push(
+      difficulty === 'BEGINNER'
+        ? `Heavy subsystems eating your Δv margin (${Math.round(coupled.deltaVMarginMs)} m/s left). Consider lighter Tier 3 parts or a bigger rocket.`
+        : `Δv margin thin: ${coupled.deltaVMarginMs.toFixed(0)} m/s. Payload-to-lift margin: ${coupled.payloadToLiftMarginKg.toFixed(0)} kg. Heavy Tier 4 parts reduce propellant fraction.`
+    );
+  }
+
+  // Thermal heater capacity exceeded
+  if (coupled.thermalCritical) {
+    tips.push(
+      difficulty === 'BEGINNER'
+        ? `Thermal heaters exceed capacity — spacecraft will freeze in shadow! Upgrade to Tier 3+ thermal.`
+        : `Required shadow heater ${coupled.shadowSurvivalHeaterW.toFixed(0)}W > thermal subsystem capacity. Cold-soak risk.`
+    );
+  }
+
+  // Tight power margin
+  if (coupled.netCruiseW < coupled.cruisePowerW * 0.15 && coupled.netCruiseW > 0) {
+    tips.push(
+      difficulty === 'BEGINNER'
+        ? `Power margin is thin (+${Math.round(coupled.netCruiseW)}W). Battery recharges slowly in sun.`
+        : `Low sunlit recharge margin: +${coupled.netCruiseW.toFixed(0)}W (<15% of cruise load).`
+    );
+  }
+
+  return tips.join(' | ');
+}
+
+function getFlightContextualTip(coupled: CoupledMetrics, _flight: any, _mission: MissionSpec, difficulty: string): string {
+  // During flight, reference launch margins
+  if (coupled.deltaVMarginMs < 200) {
+    return difficulty === 'BEGINNER'
+      ? `Low Δv reserve (${Math.round(coupled.deltaVMarginMs)} m/s) — fly efficiently!`
+      : `Launch Δv margin: ${coupled.deltaVMarginMs.toFixed(0)} m/s. Minimize gravity losses.`;
+  }
+
+  if (coupled.eclipseEnduranceMin < coupled.requiredEclipseMin * 1.2) {
+    return difficulty === 'BEGINNER'
+      ? `Battery may not survive next eclipse — watch your power!`
+      : `Eclipse endurance margin: ${(coupled.eclipseEnduranceMin / coupled.requiredEclipseMin * 100).toFixed(0)}%.`;
+  }
+
+  return '';
+}

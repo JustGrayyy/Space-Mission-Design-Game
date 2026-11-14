@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   COMMS_BANDS,
   GROUND_STATIONS,
@@ -7,13 +7,28 @@ import {
   SPACECRAFT_PARTS,
 } from '../core/constants';
 import { evaluateGroundSegment } from '../core/groundSegment';
-import { validateSpacecraft } from '../core/spacecraftValidator';
+import { validateSpacecraft, previewBuildCandidate, previewLauncherCandidate } from '../core/spacecraftValidator';
 import type {
   CommsBandId,
+  HoverDelta,
   ResourceKey,
   SubsystemCategory,
 } from '../core/types';
 import { useMissionStore } from '../store/useMissionStore';
+
+function formatDeltaHtml(deltas: HoverDelta): React.ReactNode {
+  const badges: React.ReactElement[] = [];
+  if (deltas.deltaMassKg !== 0) badges.push(<span key="mass" className={`delta-badge ${deltas.deltaMassKg > 0 ? 'improve' : 'worsen'}`}>{deltas.deltaMassKg > 0 ? '+' : ''}{deltas.deltaMassKg} kg</span>);
+  if (deltas.deltaDvMs !== 0) badges.push(<span key="dv" className={`delta-badge ${deltas.deltaDvMs > 0 ? 'improve' : 'worsen'}`}>{deltas.deltaDvMs > 0 ? '+' : ''}{deltas.deltaDvMs} m/s Δv</span>);
+  if (deltas.deltaTwr !== 0) badges.push(<span key="twr" className={`delta-badge ${deltas.deltaTwr > 0 ? 'improve' : 'worsen'}`}>{deltas.deltaTwr > 0 ? '+' : ''}{deltas.deltaTwr.toFixed(2)} TWR</span>);
+  if (deltas.deltaCostM !== 0) badges.push(<span key="cost" className={`delta-badge ${deltas.deltaCostM > 0 ? 'worsen' : 'improve'}`}>{deltas.deltaCostM > 0 ? '+' : ''}$${deltas.deltaCostM}M</span>);
+  if (deltas.deltaScheduleDays !== 0) badges.push(<span key="sched" className={`delta-badge ${deltas.deltaScheduleDays > 0 ? 'worsen' : 'improve'}`}>{deltas.deltaScheduleDays > 0 ? '+' : ''}{deltas.deltaScheduleDays}d</span>);
+  if (deltas.deltaCruisePowerW !== 0) badges.push(<span key="cruise" className={`delta-badge ${deltas.deltaCruisePowerW > 0 ? 'worsen' : 'improve'}`}>{deltas.deltaCruisePowerW > 0 ? '+' : ''}{deltas.deltaCruisePowerW}W cruise</span>);
+  if (deltas.deltaPeakPowerW !== 0) badges.push(<span key="peak" className={`delta-badge ${deltas.deltaPeakPowerW > 0 ? 'worsen' : 'improve'}`}>{deltas.deltaPeakPowerW > 0 ? '+' : ''}{deltas.deltaPeakPowerW}W peak</span>);
+  if (deltas.deltaEclipseMin !== 0) badges.push(<span key="eclipse" className={`delta-badge ${deltas.deltaEclipseMin > 0 ? 'improve' : 'worsen'}`}>{deltas.deltaEclipseMin > 0 ? '+' : ''}{deltas.deltaEclipseMin} min eclipse</span>);
+  if (deltas.deltaThermalW !== 0) badges.push(<span key="thermal" className={`delta-badge ${deltas.deltaThermalW > 0 ? 'worsen' : 'improve'}`}>{deltas.deltaThermalW > 0 ? '+' : ''}{deltas.deltaThermalW}W thermal</span>);
+  return badges;
+}
 
 const SUBSYSTEM_SLOTS: { key: SubsystemCategory; label: string }[] = [
   { key: 'structure', label: 'FRAME' },
@@ -80,9 +95,25 @@ export const PhaseHudOverlay: React.FC = () => {
   const restartCampaign = useMissionStore((s) => s.restartCampaign);
 
   const [hoveredPartId, setHoveredPartId] = useState<string | null>(null);
+  const setHoveredCandidate = useMissionStore((s) => s.setHoveredCandidate);
 
   const mission = MISSIONS[missionId];
   const isBeginner = difficulty === 'BEGINNER';
+
+  // Memoized preview candidates for hover deltas
+  const previewCandidate = useMemo(() => {
+    if (!hoveredPartId || !activeSnapCategory) return null;
+    if (activeSnapCategory === 'launcher') {
+      return previewLauncherCandidate(missionId, spacecraft, ground, hoveredPartId);
+    } else {
+      return previewBuildCandidate(missionId, spacecraft, ground, activeSnapCategory, hoveredPartId);
+    }
+  }, [hoveredPartId, activeSnapCategory, missionId, spacecraft, ground, difficulty]);
+
+  // Update store when hover candidate changes
+  useEffect(() => {
+    setHoveredCandidate(previewCandidate);
+  }, [previewCandidate, setHoveredCandidate]);
 
   // --- TITLE SCREEN ---
   if (phase === 'TITLE') {
@@ -326,19 +357,39 @@ export const PhaseHudOverlay: React.FC = () => {
           {inspectedOpt && (
             <div className="part-inspector-bar">
               <strong>{inspectedOpt.name}:</strong> {inspectedOpt.desc}
+              {previewCandidate && previewCandidate.deltas && (
+                <div className="hover-delta-badges">
+                  {formatDeltaHtml(previewCandidate.deltas)}
+                </div>
+              )}
             </div>
           )}
 
           <div className="part-tier-row">
             {options.map((opt) => {
               const isSelected = selectedId === opt.id;
+              const isHovered = hoveredPartId === opt.id;
+              // Compute inline deltas for hovered part
+              let inlineDeltas: string[] = [];
+              if (isHovered && previewCandidate && previewCandidate.deltas) {
+                const d = previewCandidate.deltas;
+                if (d.deltaMassKg !== 0) inlineDeltas.push(`${d.deltaMassKg > 0 ? '+' : ''}${d.deltaMassKg} kg`);
+                if (d.deltaDvMs !== 0) inlineDeltas.push(`${d.deltaDvMs > 0 ? '+' : ''}${d.deltaDvMs} m/s Δv`);
+                if (d.deltaTwr !== 0) inlineDeltas.push(`${d.deltaTwr > 0 ? '+' : ''}${d.deltaTwr.toFixed(2)} TWR`);
+                if (d.deltaCostM !== 0) inlineDeltas.push(`${d.deltaCostM > 0 ? '+' : ''}$${d.deltaCostM}M`);
+                if (d.deltaScheduleDays !== 0) inlineDeltas.push(`${d.deltaScheduleDays > 0 ? '+' : ''}${d.deltaScheduleDays}d`);
+                if (d.deltaCruisePowerW !== 0) inlineDeltas.push(`${d.deltaCruisePowerW > 0 ? '+' : ''}${d.deltaCruisePowerW}W cruise`);
+                if (d.deltaPeakPowerW !== 0) inlineDeltas.push(`${d.deltaPeakPowerW > 0 ? '+' : ''}${d.deltaPeakPowerW}W peak`);
+                if (d.deltaEclipseMin !== 0) inlineDeltas.push(`${d.deltaEclipseMin > 0 ? '+' : ''}${d.deltaEclipseMin} min eclipse`);
+                if (d.deltaThermalW !== 0) inlineDeltas.push(`${d.deltaThermalW > 0 ? '+' : ''}${d.deltaThermalW}W thermal`);
+              }
               return (
                 <button
                   key={opt.id}
                   type="button"
                   draggable
                   data-testid={`part-chip-${opt.id}`}
-                  className={`part-tier-chip ${isSelected ? 'selected' : ''}`}
+                  className={`part-tier-chip ${isSelected ? 'selected' : ''} ${isHovered ? 'hovered' : ''}`}
                   onMouseEnter={() => setHoveredPartId(opt.id)}
                   onMouseLeave={() => setHoveredPartId(null)}
                   onDragStart={(e) => {
@@ -351,6 +402,15 @@ export const PhaseHudOverlay: React.FC = () => {
                 >
                   <div className="part-chip-name">{opt.name}</div>
                   <div className="part-chip-meta">{opt.meta}</div>
+                  {isHovered && inlineDeltas.length > 0 && (
+                    <div className="inline-delta-badges">
+                      {inlineDeltas.map((delta, i) => (
+                        <span key={i} className={`inline-delta ${delta.startsWith('+') || delta.startsWith('-') ? (delta.startsWith('-') ? 'worsen' : 'improve') : ''}`}>
+                          {delta}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </button>
               );
             })}
@@ -515,6 +575,12 @@ export const PhaseHudOverlay: React.FC = () => {
     );
     const activeFuelKg =
       flight.activeStageIndex === 0 ? flight.stage1PropKg : flight.stage2PropKg;
+    const totalFuelKg = flight.stage1PropKg + flight.stage2PropKg;
+    const fuelPct = Math.round((totalFuelKg / Math.max(1, flight.stage1PropKg + flight.stage2PropKg)) * 100);
+
+    // Thermal color coding
+    const thermalColor = flight.thermalMarginC < 10 ? 'critical' : flight.thermalMarginC < 25 ? 'warn' : 'good';
+    const batteryColor = battPct < 20 ? 'critical' : battPct < 40 ? 'warn' : 'good';
 
     return (
       <div className="hud-layer pointer-pass" data-testid="flight-hud">
@@ -632,12 +698,25 @@ export const PhaseHudOverlay: React.FC = () => {
             </div>
             <div className="inst-pill">
               <span className="inst-k">FUEL</span>
-              <span className="inst-v">{Math.round(activeFuelKg)} kg</span>
+              <span className="inst-v">{Math.round(activeFuelKg)} kg ({fuelPct}%)</span>
             </div>
-            <div className="inst-pill">
+            <div className={`inst-pill ${batteryColor}`}>
               <span className="inst-k">BAT</span>
               <span className="inst-v">
                 {battPct}%{flight.inEclipse ? ' (ECLIPSE)' : ''}
+                {flight.currentPowerDrawW > 0 ? ` (${flight.currentPowerDrawW > flight.currentPowerGenW ? '-' : '+'}${Math.abs(flight.currentPowerGenW - flight.currentPowerDrawW)}W)` : ''}
+              </span>
+            </div>
+            <div className={`inst-pill ${thermalColor}`}>
+              <span className="inst-k">THERM</span>
+              <span className="inst-v">
+                {flight.thermalTempC.toFixed(0)}°C (M:{flight.thermalMarginC.toFixed(0)}°C)
+              </span>
+            </div>
+            <div className="inst-pill">
+              <span className="inst-k">BOIL</span>
+              <span className="inst-v">
+                {flight.propellantBoilOffKg.toFixed(2)} kg
               </span>
             </div>
             <div className="inst-pill">

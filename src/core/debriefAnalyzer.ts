@@ -2,6 +2,7 @@ import { COMMS_BANDS, MISSIONS } from './constants';
 import { evaluateGroundSegment } from './groundSegment';
 import { validateSpacecraft } from './spacecraftValidator';
 import type {
+  CoupledMetrics,
   DebriefReport,
   DifficultyMode,
   FlightState,
@@ -16,7 +17,8 @@ export function generateDebrief(
   spacecraftConfig: SpacecraftConfig,
   groundConfig: GroundConfig,
   flightState: FlightState,
-  mode: DifficultyMode
+  mode: DifficultyMode,
+  launchCoupledMetrics?: CoupledMetrics
 ): DebriefReport {
   const mission = MISSIONS[missionId];
   const craftVal = validateSpacecraft(missionId, spacecraftConfig, mode, groundConfig);
@@ -26,8 +28,11 @@ export function generateDebrief(
 
   const band = COMMS_BANDS[groundConfig.bandId];
 
-  // 1. MASS & DELTA-V
-  const dvMargin = craftVal.mass.totalDeltaVMs - mission.targetDeltaVMs;
+  // Use launch-time coupled metrics if available, else fall back to validation metrics
+  const coupled = launchCoupledMetrics ?? craftVal.coupledMetrics;
+
+  // 1. MASS & DELTA-V (using coupled metrics)
+  const dvMargin = coupled.deltaVMarginMs;
   const massFailed =
     outcome === 'FAILED' &&
     Boolean(
@@ -45,25 +50,26 @@ export function generateDebrief(
     status: massStatus,
     whatWentRight:
       massStatus === 'OPTIMAL'
-        ? `Delivered ${craftVal.mass.spacecraftDryKg} kg spacecraft cleanly with ${flightState.deltaVRemainingMs.toFixed(0)} m/s fuel reserve.`
-        : `Rocket structural integration achieved ${craftVal.mass.padTwr.toFixed(2)} pad TWR.`,
+        ? `Delivered ${craftVal.mass.spacecraftDryKg} kg spacecraft cleanly with ${flightState.deltaVRemainingMs.toFixed(0)} m/s fuel reserve (Delta-v margin: ${dvMargin.toFixed(0)} m/s).`
+        : `Rocket structural integration achieved ${coupled.padTwr.toFixed(2)} pad TWR.`,
     whatWentWrong:
       massStatus === 'CRITICAL'
         ? flightState.failureReason ?? 'Insufficient propulsion or landing/entry protection.'
         : massStatus === 'WARNING'
-          ? `Thin Δv margin (${dvMargin.toFixed(0)} m/s above target).`
-          : 'No structural or Δv anomalies detected.',
+          ? `Thin Delta-v margin (${dvMargin.toFixed(0)} m/s above target); payload-to-lift margin: ${coupled.payloadToLiftMarginKg.toFixed(0)} kg.`
+          : `No structural or Delta-v anomalies detected. Payload-to-lift margin: ${coupled.payloadToLiftMarginKg.toFixed(0)} kg.`,
     beginnerNote:
       massStatus === 'OPTIMAL'
         ? 'Your rocket had enough muscle to lift off, climb into space, and finish the flight with spare fuel.'
         : 'Lighter spacecraft parts or a stronger rocket/heatshield would give you much safer flight margins.',
-    realisticMetrics: `Dry: ${craftVal.mass.spacecraftDryKg} kg | Wet: ${craftVal.mass.launchTotalMassKg} kg | TWR: ${craftVal.mass.padTwr.toFixed(2)} | Δv Expended: ${flightState.deltaVExpendedMs.toFixed(0)} m/s | Remaining: ${flightState.deltaVRemainingMs.toFixed(0)} m/s`,
+    realisticMetrics: `Dry: ${craftVal.mass.spacecraftDryKg} kg | Wet: ${craftVal.mass.launchTotalMassKg} kg | TWR: ${coupled.padTwr.toFixed(2)} | Delta-v Expended: ${flightState.deltaVExpendedMs.toFixed(0)} m/s | Remaining: ${flightState.deltaVRemainingMs.toFixed(0)} m/s | Delta-v Margin: ${dvMargin.toFixed(0)} m/s | Lift Margin: ${coupled.payloadToLiftMarginKg.toFixed(0)} kg | Boil-off: ${flightState.propellantBoilOffKg.toFixed(2)} kg`,
   };
 
-  // 2. POWER
+  // 2. POWER (using coupled metrics: solar flux, dual power modes, thermal heaters)
   const powerFailed =
     outcome === 'FAILED' &&
     Boolean(flightState.failureReason?.match(/Power blackout|battery/i));
+  const solarPct = Math.round(coupled.irradianceFactor * 100);
   const powerStatus: ResourceDebrief['status'] = powerFailed
     ? 'CRITICAL'
     : flightState.minBatteryPct < 30
@@ -74,24 +80,24 @@ export function generateDebrief(
     status: powerStatus,
     whatWentRight:
       powerStatus !== 'CRITICAL'
-        ? `Power bus stayed online through eclipses (lowest battery: ${flightState.minBatteryPct.toFixed(0)}%).`
-        : `Solar/RTG array peaked at ${craftVal.power.sunlitGenerationW.toFixed(0)} W.`,
+        ? `Power bus stayed online through eclipses (lowest battery: ${flightState.minBatteryPct.toFixed(0)}%). Solar flux: ${solarPct}% of Earth. Thermal control: ${flightState.thermalTempC.toFixed(1)}°C (margin: ${flightState.thermalMarginC.toFixed(1)}°C).`
+        : `Solar/RTG array peaked at ${coupled.sunlitGenerationW.toFixed(0)} W (${solarPct}% Earth flux).`,
     whatWentWrong:
       powerStatus === 'CRITICAL'
         ? flightState.failureReason ?? 'Battery ran dry during shadow crossing.'
         : powerStatus === 'WARNING'
-          ? `Battery dipped to ${flightState.minBatteryPct.toFixed(0)}% during shadow.`
-          : 'Zero brownouts or power bus resets.',
+          ? `Battery dipped to ${flightState.minBatteryPct.toFixed(0)}% during shadow. Cruise margin: ${coupled.netCruiseW.toFixed(0)} W, Peak margin: ${coupled.netPeakW.toFixed(0)} W. Thermal: ${flightState.thermalTempC.toFixed(1)}°C.`
+          : `Zero brownouts. Cruise margin: +${coupled.netCruiseW.toFixed(0)} W, Peak margin: +${coupled.netPeakW.toFixed(0)} W. Thermal heaters: sunlit ${coupled.sunlitSurvivalHeaterW.toFixed(0)} W, shadow ${coupled.shadowSurvivalHeaterW.toFixed(0)} W. Temp: ${flightState.thermalTempC.toFixed(1)}°C (margin: ${flightState.thermalMarginC.toFixed(1)}°C).`,
     beginnerNote:
       powerStatus === 'OPTIMAL'
-        ? 'Your solar panels/RTG and battery kept the lights on even on the dark side of the planet.'
-        : 'In shadow, solar panels produce 0 W — bring a bigger battery or an RTG nuclear battery for dark/deep space.',
-    realisticMetrics: `Gen: ${craftVal.power.sunlitGenerationW.toFixed(0)} W sunlit (${craftVal.power.eclipseGenerationW.toFixed(0)} W eclipse) | Load: ${craftVal.power.totalDrawW} W | Min SoC: ${flightState.minBatteryPct.toFixed(1)}%`,
+        ? `Your solar panels/RTG and battery kept the lights on even on the dark side. Sunlight here is ${solarPct}% of Earth orbit.`
+        : `In shadow, solar panels produce 0 W — bring a bigger battery or an RTG nuclear battery for dark/deep space. At ${solarPct}% solar flux, solar arrays need to be ${(100/solarPct).toFixed(0)}% larger than at Earth.`,
+    realisticMetrics: `Gen: ${coupled.sunlitGenerationW.toFixed(0)} W sunlit (${coupled.eclipseGenerationW.toFixed(0)} W eclipse) @ ${solarPct}% flux | Cruise: ${coupled.cruisePowerW.toFixed(0)} W (margin: ${coupled.netCruiseW.toFixed(0)} W) | Peak: ${coupled.peakPowerW.toFixed(0)} W (margin: ${coupled.netPeakW.toFixed(0)} W) | Peak Draw (flight): ${flightState.peakPowerDrawW.toFixed(0)} W | Sunlit heaters: ${coupled.sunlitSurvivalHeaterW.toFixed(0)} W | Shadow heaters: ${coupled.shadowSurvivalHeaterW.toFixed(0)} W | Min SoC: ${flightState.minBatteryPct.toFixed(1)}% | Temp: ${flightState.thermalTempC.toFixed(1)}°C | Margin: ${flightState.thermalMarginC.toFixed(1)}°C`,
   };
 
-  // 3. BUDGET
-  const overBudget = groundEval.totalCampaignCostM > mission.budgetCapM;
-  const budgetPct = (groundEval.totalCampaignCostM / mission.budgetCapM) * 100;
+  // 3. BUDGET (using coupled metrics)
+  const overBudget = coupled.totalCampaignCostM > mission.budgetCapM;
+  const budgetPct = (coupled.totalCampaignCostM / mission.budgetCapM) * 100;
   const budgetStatus: ResourceDebrief['status'] = overBudget
     ? 'CRITICAL'
     : budgetPct > 92
@@ -101,21 +107,21 @@ export function generateDebrief(
   const budgetDebrief: ResourceDebrief = {
     status: budgetStatus,
     whatWentRight: !overBudget
-      ? `Campaign cost $${groundEval.totalCampaignCostM}M stayed within $${mission.budgetCapM}M NASA ceiling.`
-      : `Invested $${craftVal.budget.totalCraftAndLauncherM}M in flight hardware.`,
+      ? `Campaign cost $${coupled.totalCampaignCostM}M stayed within $${mission.budgetCapM}M NASA ceiling (margin: $${coupled.budgetMarginM}M).`
+      : `Invested $${coupled.totalCraftAndLauncherM}M in flight hardware.`,
     whatWentWrong: overBudget
-      ? `Over budget by $${groundEval.totalCampaignCostM - mission.budgetCapM}M.`
+      ? `Over budget by $${coupled.totalCampaignCostM - mission.budgetCapM}M.`
       : budgetPct > 92
-        ? `Used ${budgetPct.toFixed(0)}% of budget ceiling — minimal contingency reserve.`
+        ? `Used ${budgetPct.toFixed(0)}% of budget ceiling — minimal contingency reserve ($${coupled.budgetMarginM}M).`
         : 'All hardware, launch, and ops costs balanced cleanly.',
     beginnerNote:
       overBudget
-        ? 'Try swapping to a lighter launcher or cheaper subsystem options to stay under NASA’s budget cap.'
+        ? 'Try swapping to a lighter launcher or cheaper subsystem options to stay under NASA budget cap.'
         : 'Smart cost discipline — you delivered mission science without overspending.',
-    realisticMetrics: `Craft+LV: $${craftVal.budget.totalCraftAndLauncherM}M | Ground: $${groundEval.groundCostM}M | Ops (${groundConfig.plannedLifetimeYears}y): $${groundEval.opsCostM}M | Cap: $${mission.budgetCapM}M`,
+    realisticMetrics: `Craft+LV: $${coupled.totalCraftAndLauncherM}M | Ground: $${coupled.groundCostM}M | Ops (${groundConfig.plannedLifetimeYears}y): $${coupled.opsCostM}M | Total: $${coupled.totalCampaignCostM}M | Cap: $${mission.budgetCapM}M | Margin: $${coupled.budgetMarginM}M`,
   };
 
-  // 4. DATA
+  // 4. DATA (using coupled metrics for bus & downlink margin)
   const dataStatus: ResourceDebrief['status'] =
     outcome === 'FAILED' && flightState.deliveredDataMb < mission.targetScienceMb
       ? 'CRITICAL'
@@ -125,7 +131,7 @@ export function generateDebrief(
 
   const dataDebrief: ResourceDebrief = {
     status: dataStatus,
-    whatWentRight: `Delivered ${flightState.deliveredDataMb.toFixed(1)} / ${mission.targetScienceMb} MB of target science data.`,
+    whatWentRight: `Delivered ${flightState.deliveredDataMb.toFixed(1)} / ${mission.targetScienceMb} MB of target science data. Bus margin: ${coupled.dataBusMarginMbps} Mbps, Downlink: ${coupled.commsDownlinkMbps.toFixed(1)} Mbps.`,
     whatWentWrong:
       flightState.droppedDataMb > 10
         ? `Buffer overflow dropped ${flightState.droppedDataMb.toFixed(1)} MB of science packets.`
@@ -136,10 +142,10 @@ export function generateDebrief(
       flightState.droppedDataMb > 10
         ? 'Your camera filled onboard memory faster than the radio could empty it — upgrade computer storage or radio speed!'
         : 'Every byte of science data was captured cleanly and beamed home.',
-    realisticMetrics: `Delivered: ${flightState.deliveredDataMb.toFixed(1)} MB | Dropped: ${flightState.droppedDataMb.toFixed(1)} MB | Buffer: ${flightState.storageMaxMb} MB | Rate: ${craftVal.data.payloadDataRateMbps} Mbps`,
+    realisticMetrics: `Delivered: ${flightState.deliveredDataMb.toFixed(1)} MB | Dropped: ${flightState.droppedDataMb.toFixed(1)} MB | Buffer: ${flightState.storageMaxMb} MB | Payload: ${craftVal.data.payloadDataRateMbps} Mbps | Bus: ${craftVal.data.cpuMaxMbps} Mbps (margin: ${coupled.dataBusMarginMbps} Mbps) | Downlink: ${coupled.commsDownlinkMbps.toFixed(1)} Mbps`,
   };
 
-  // 5. COMMS
+  // 5. COMMS (using coupled metrics)
   const commsStatus: ResourceDebrief['status'] =
     groundConfig.activeStationIds.length === 0
       ? 'CRITICAL'
@@ -151,7 +157,7 @@ export function generateDebrief(
 
   const commsReport: ResourceDebrief = {
     status: commsDebrief,
-    whatWentRight: `${band.name} link over ${groundConfig.activeStationIds.length} ground station(s) achieved ${groundEval.contactCoveragePct}% coverage.`,
+    whatWentRight: `${band.name} link over ${groundConfig.activeStationIds.length} ground station(s) achieved ${groundEval.contactCoveragePct}% coverage. Downlink capacity: ${coupled.commsDownlinkMbps.toFixed(1)} Mbps.`,
     whatWentWrong:
       groundConfig.activeStationIds.length === 0
         ? 'Zero ground stations selected — total communications blackout.'
@@ -162,11 +168,11 @@ export function generateDebrief(
       commsDebrief === 'OPTIMAL'
         ? 'Your Deep Space Network dishes and radio band kept strong contact with the spacecraft.'
         : 'Adding DSN dishes or upgrading from S-Band to X-Band/Ka-Band boosts download speed.',
-    realisticMetrics: `Band: ${band.name} (${band.bandwidthMbps} Mbps) | Coverage: ${groundEval.contactCoveragePct}% | Contact/Orbit: ${groundEval.contactSecPerOrbit}s`,
+    realisticMetrics: `Band: ${band.name} (${band.bandwidthMbps} Mbps) | Coverage: ${groundEval.contactCoveragePct}% | Contact/Orbit: ${groundEval.contactSecPerOrbit}s | Distance factor: ${mission.distanceCommsFactor}x | Downlink: ${coupled.commsDownlinkMbps.toFixed(1)} Mbps`,
   };
 
-  // 6. TIME & SCHEDULE
-  const overTime = groundEval.totalCampaignMonths > mission.scheduleLimitMonths;
+  // 6. TIME & SCHEDULE (using coupled metrics)
+  const overTime = coupled.buildMonths > mission.scheduleLimitMonths;
   const timeStatus: ResourceDebrief['status'] = overTime
     ? 'CRITICAL'
     : outcome === 'FAILED'
@@ -176,10 +182,10 @@ export function generateDebrief(
   const timeDebrief: ResourceDebrief = {
     status: timeStatus,
     whatWentRight: !overTime
-      ? `Built in ${groundEval.totalCampaignMonths} months (limit ${mission.scheduleLimitMonths} mo); flight elapsed ${Math.round(flightState.elapsedFlightSec)}s.`
-      : `Flight simulation logged ${Math.round(flightState.elapsedFlightSec)}s telemetry.`,
+      ? `Built in ${coupled.buildMonths} months (limit ${mission.scheduleLimitMonths} mo); flight elapsed ${Math.round(flightState.elapsedFlightSec)}s. Anomalies handled: ${flightState.anomaliesHandled}.`
+      : `Flight simulation logged ${Math.round(flightState.elapsedFlightSec)}s telemetry. Anomalies handled: ${flightState.anomaliesHandled}.`,
     whatWentWrong: overTime
-      ? `Exceeded launch window by ${groundEval.totalCampaignMonths - mission.scheduleLimitMonths} months.`
+      ? `Exceeded launch window by ${coupled.buildMonths - mission.scheduleLimitMonths} months.`
       : outcome === 'FAILED'
         ? `Flight terminated prematurely at T+${Math.round(flightState.elapsedFlightSec)}s.`
         : 'Met integration window and flight milestones on time.',
@@ -187,7 +193,7 @@ export function generateDebrief(
       overTime
         ? 'Faster-to-build parts help you hit strict planetary launch windows.'
         : 'Great schedule management — integrated on time and reached operational phase smoothly.',
-    realisticMetrics: `Campaign Build: ${groundEval.totalCampaignMonths}/${mission.scheduleLimitMonths} mo | Orbit: ${flightState.enteredOrbitAtSec ? `T+${Math.round(flightState.enteredOrbitAtSec)}s` : 'N/A'} | Target: ${flightState.reachedTargetAtSec ? `T+${Math.round(flightState.reachedTargetAtSec)}s` : 'N/A'}`,
+    realisticMetrics: `Campaign Build: ${coupled.buildMonths}/${mission.scheduleLimitMonths} mo | Orbit: ${flightState.enteredOrbitAtSec ? `T+${Math.round(flightState.enteredOrbitAtSec)}s` : 'N/A'} | Target: ${flightState.reachedTargetAtSec ? `T+${Math.round(flightState.reachedTargetAtSec)}s` : 'N/A'} | Anomalies: ${flightState.anomaliesHandled} handled | Boil-off: ${flightState.propellantBoilOffKg.toFixed(2)} kg | Peak Power: ${flightState.peakPowerDrawW.toFixed(0)} W | Min Temp: ${flightState.thermalTempC.toFixed(1)}°C`,
   };
 
   const headline =
@@ -199,7 +205,7 @@ export function generateDebrief(
     outcome === 'SUCCESS'
       ? mode === 'BEGINNER'
         ? `Outstanding flight, Commander! Your ${craftVal.mass.spacecraftDryKg} kg spacecraft survived launch, powered through shadows, and beamed all ${mission.targetScienceMb} MB of science back to Earth.`
-        : `Nominal campaign completion. All ${mission.targetScienceMb} MB science telemetry downlinked via ${band.name}; remaining Δv ${flightState.deltaVRemainingMs.toFixed(0)} m/s.`
+        : `Nominal campaign completion. All ${mission.targetScienceMb} MB science telemetry downlinked via ${band.name}; remaining Delta-v ${flightState.deltaVRemainingMs.toFixed(0)} m/s.`
       : mode === 'BEGINNER'
         ? `Flight ended early: ${flightState.failureReason ?? 'Unknown anomaly'}. Review the red cards below and tweak your build in the Hangar!`
         : `Anomaly termination at T+${Math.round(flightState.elapsedFlightSec)}s: ${flightState.failureReason ?? 'Telemetry lost'}. Inspect subsystem margins below.`;
