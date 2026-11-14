@@ -68,6 +68,9 @@ export interface MissionStoreState {
   selectTopObjective: (choice: TopObjectiveChoice) => void;
   selectExploreSubMission: (id: 'SPACE_TELESCOPE' | 'EARTH_OBSERVATION') => void;
   enterHangar: () => void;
+  requestEnterHangar: () => void;
+  openTutorial: () => void;
+  closeTutorial: () => void;
 
   // Hangar Actions
   setActiveSnapCategory: (category: SubsystemCategory | null) => void;
@@ -94,6 +97,11 @@ export interface MissionStoreState {
   toggleFlightAssist: () => void;
   toggleAutoStage: () => void;
   abortMission: () => void;
+
+  // Tutorial State & Actions
+  tutorialOpen: boolean;
+  tutorialAcknowledged: boolean;
+  acknowledgeTutorialAndEnterHangar: () => void;
 
   // Debrief Actions
   returnToHangarKeepDesign: () => void;
@@ -130,12 +138,16 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
     stageRequested: false,
   },
   debrief: null,
+  tutorialOpen: false,
+  tutorialAcknowledged: false,
 
   startSingleplayer: () => {
     set({
       phase: 'OBJECTIVE_SELECT',
       selectedObjective: null,
       exploreSubChoiceOpen: false,
+      tutorialOpen: false,
+      tutorialAcknowledged: false,
     });
   },
 
@@ -183,6 +195,35 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
 
   enterHangar: () => {
     set({
+      phase: 'HANGAR',
+      activeSnapCategory: 'structure',
+      debrief: null,
+      flight: null,
+      tutorialOpen: false,
+    });
+  },
+
+  requestEnterHangar: () => {
+    const { tutorialAcknowledged } = get();
+    if (!tutorialAcknowledged) {
+      set({ tutorialOpen: true });
+    } else {
+      get().enterHangar();
+    }
+  },
+
+  openTutorial: () => {
+    set({ tutorialOpen: true });
+  },
+
+  closeTutorial: () => {
+    set({ tutorialOpen: false });
+  },
+
+  acknowledgeTutorialAndEnterHangar: () => {
+    set({
+      tutorialOpen: false,
+      tutorialAcknowledged: true,
       phase: 'HANGAR',
       activeSnapCategory: 'structure',
       debrief: null,
@@ -491,6 +532,8 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
       },
       flight: null,
       debrief: null,
+      tutorialOpen: false,
+      tutorialAcknowledged: false,
     });
   },
 }));
