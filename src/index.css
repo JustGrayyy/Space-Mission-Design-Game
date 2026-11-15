@@ -45,21 +45,422 @@ body,
 }
 
 /* --- TOP RESOURCE STRIP --- */
+:root {
+  --hud-top: 92px;
+  --ink: #e2f1ff;
+  --ink-soft: #a9c1d9;
+  --accent: #38bdf8;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --panel: rgba(6, 12, 26, 0.84);
+  --line: rgba(56, 189, 248, 0.28);
+}
+
+::selection {
+  background: rgba(56, 189, 248, 0.35);
+  color: #fff;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .top-resource-strip {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: 44px;
   z-index: 20;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 14px;
-  background: rgba(6, 12, 26, 0.78);
+  flex-direction: column;
+  background: rgba(6, 12, 26, 0.82);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(56, 189, 248, 0.28);
+  border-bottom: 1px solid var(--line);
+}
+
+.top-bar-row {
+  height: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+}
+
+.top-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Step tracker: where you are in the mission */
+.phase-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.phase-stepper .step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 5px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64809e;
+  white-space: nowrap;
+  transition: color 0.3s ease, background-color 0.3s ease;
+}
+
+.phase-stepper .step + .step::before {
+  content: '';
+  width: 14px;
+  height: 1px;
+  margin-right: 6px;
+  margin-left: -8px;
+  background: rgba(100, 128, 158, 0.5);
+}
+
+.phase-stepper .step-mark {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid currentColor;
+  font-variant-numeric: tabular-nums;
+}
+
+.phase-stepper .step.done {
+  color: #7fd9b6;
+}
+
+.phase-stepper .step.done .step-mark {
+  background: rgba(52, 211, 153, 0.18);
+  border-color: transparent;
+}
+
+.phase-stepper .step.current {
+  color: #fff;
+  background: rgba(56, 189, 248, 0.16);
+}
+
+.phase-stepper .step.current .step-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #03111f;
+}
+
+.sound-toggle {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(10, 20, 40, 0.75);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.sound-toggle[aria-pressed='true'] {
+  color: var(--accent);
+}
+
+.sound-toggle:hover,
+.mode-btn:hover {
+  color: #fff;
+}
+
+/* Resource row: one plain status per resource */
+.resource-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.res-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(100, 128, 158, 0.35);
+  background: rgba(15, 28, 52, 0.6);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.res-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.res-chip-label {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.res-chip-value {
+  color: #f8fafc;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.res-chip.warn {
+  border-color: rgba(251, 191, 36, 0.55);
+}
+
+.res-chip.warn .res-chip-dot {
+  background: var(--warn);
+}
+
+.res-chip.bad {
+  border-color: rgba(248, 113, 113, 0.7);
+  background: rgba(90, 20, 28, 0.55);
+}
+
+.res-chip.bad .res-chip-dot {
+  background: var(--bad);
+  animation: chip-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes chip-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.panel-heading {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+
+.mission-brief {
+  margin: 8px 0 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.mission-limits {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.mission-limits strong {
+  color: #fff;
+}
+
+.kap-build-btn {
+  border-color: rgba(52, 211, 153, 0.55) !important;
+  color: #a7f3d0 !important;
+}
+
+.kap-build-btn.full {
+  width: 100%;
+  margin: 2px 0 4px;
+}
+
+/* Flight goal: the number that decides the win */
+.flight-goal {
+  padding: 2px 2px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.flight-goal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.flight-goal-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.flight-goal-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.flight-goal-track {
+  margin-top: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(100, 128, 158, 0.25);
+  overflow: hidden;
+}
+
+.flight-goal-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0ea5e9, #34d399);
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.flight-goal-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+/* Short mission briefing */
+.tutorial-brief-card {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 28px 30px 22px;
+  border-radius: 14px;
+  background: rgba(7, 14, 30, 0.96);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  animation: brief-in 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes brief-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+    filter: blur(4px);
+  }
+}
+
+.brief-mission {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.brief-goal {
+  margin: 6px 0 10px;
+  font-size: 24px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #fff;
+  text-wrap: balance;
+}
+
+.brief-why {
+  margin: 0 0 20px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.brief-traps-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fca5a5;
+  margin-bottom: 8px;
+}
+
+.brief-traps {
+  margin: 0 0 22px;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.brief-traps strong {
+  color: #fff;
+}
+
+.brief-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.brief-actions > button {
+  flex: 1;
+  min-height: 44px;
+}
+
+.brief-details-link {
+  display: block;
+  margin: 14px auto 0;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.brief-details-link:hover {
+  color: #fff;
+}
+
+.debrief-line.note.plain {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.debrief-more summary {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.debrief-more summary:hover {
+  color: #fff;
+}
+
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1180px) {
+  .phase-stepper .step:not(.current) .step-label {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 .resource-gauges.hangar-coupled {
@@ -247,7 +648,7 @@ body,
 /* --- KAP COMMS BUBBLE --- */
 .kap-comms-bubble {
   position: fixed;
-  top: 56px;
+  top: var(--hud-top);
   left: 14px;
   width: 480px;
   max-width: calc(100vw - 28px);
@@ -561,7 +962,7 @@ body,
 /* --- OBJECTIVE SELECT RETICLE --- */
 .tactical-reticle {
   position: fixed;
-  top: 58px;
+  top: var(--hud-top);
   right: 16px;
   width: 390px;
   max-width: calc(100vw - 32px);
@@ -671,7 +1072,7 @@ body,
 /* --- HANGAR HUD --- */
 .hangar-right-actions {
   position: fixed;
-  top: 58px;
+  top: var(--hud-top);
   right: 16px;
   display: flex;
   flex-direction: column;
@@ -815,7 +1216,11 @@ body,
 .launch-site-console,
 .ground-console {
   position: fixed;
-  top: 58px;
+  top: var(--hud-top);
+  max-height: calc(100vh - var(--hud-top) - 14px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.4) transparent;
   right: 16px;
   width: 390px;
   max-width: calc(100vw - 32px);
@@ -1060,7 +1465,7 @@ body,
 
 .flight-right-controls {
   position: fixed;
-  top: 58px;
+  top: var(--hud-top);
   right: 16px;
   display: flex;
   flex-direction: column;
@@ -1729,7 +2134,7 @@ body,
   gap: 12px;
   max-width: 420px;
   pointer-events: auto;
-  animation: slideInFromRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: slideInFromRight 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes slideInFromRight {
@@ -1839,7 +2244,7 @@ body,
   padding: 14px 16px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(10px);
-  animation: bubblePop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: bubblePop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes bubblePop {
@@ -1949,4 +2354,1226 @@ body,
   .robot-message {
     font-size: 12px;
   }
+}
+
+/* =====================================================================
+   THEME LAYER: "Flight manual"
+   Mission-control paperwork meets the night sky: solid ink panels, warm
+   paper-white text, one signal colour (international orange, the colour of
+   launch suits), condensed engineering type, monospace only for live
+   numbers. Placed last so it wins over the older HUD styles above.
+   ===================================================================== */
+:root {
+  --font-display: 'Barlow Condensed', 'Bahnschrift', 'Arial Narrow', sans-serif;
+  --font-body: 'Barlow', 'Segoe UI', system-ui, sans-serif;
+  --font-data: 'JetBrains Mono', 'Consolas', ui-monospace, monospace;
+
+  --space: #05070d;
+  --panel-solid: #0c111d;
+  --panel-raised: #131a2a;
+  --panel-line: #24304a;
+  --panel-line-strong: #34446a;
+  --paper: #f4efe4;
+  --paper-soft: #b9b3a6;
+  --paper-faint: #8a8576;
+  --signal: #ff7a1a;
+  --signal-ink: #1a0b00;
+  --sky: #7cc4ff;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --bad: #ff5a5a;
+  --accent: var(--signal);
+  --ink: var(--paper);
+  --ink-soft: var(--paper-soft);
+  --line: var(--panel-line);
+  --shadow: 0 14px 40px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --hud-top: 100px;
+}
+
+html,
+body,
+#root,
+.game-root {
+  font-family: var(--font-body);
+  color: var(--paper);
+  background: var(--space);
+  font-size: 16px;
+}
+
+::selection {
+  background: rgba(255, 122, 26, 0.4);
+  color: #fff;
+}
+
+/* ---------- Panels: solid, no frosted glass ---------- */
+.tactical-reticle,
+.launch-site-console,
+.ground-console,
+.kap-comms-bubble,
+.hangar-bottom-dock,
+.flight-bottom-strip,
+.debrief-frame,
+.tutorial-modal-card,
+.tutorial-brief-card,
+.vab-readout-pill,
+.flight-phase-pill,
+.flight-left-throttle {
+  background: var(--panel-solid);
+  backdrop-filter: none;
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+.tactical-reticle,
+.launch-site-console,
+.ground-console {
+  width: 430px;
+  padding: 22px 24px;
+  gap: 12px;
+}
+
+/* ---------- Top bar ---------- */
+.top-resource-strip {
+  background: rgba(5, 7, 13, 0.94);
+  backdrop-filter: none;
+  border-bottom: 1px solid var(--panel-line);
+}
+
+.top-bar-row {
+  height: 52px;
+  padding: 0 20px;
+}
+
+.top-mission-tag {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--paper);
+  max-width: 340px;
+}
+
+.mission-dot {
+  background: var(--signal);
+  box-shadow: none;
+}
+
+.phase-stepper .step {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--paper-faint);
+  padding: 5px 12px 5px 6px;
+}
+
+.phase-stepper .step-mark {
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+  font-family: var(--font-data);
+}
+
+.phase-stepper .step.done {
+  color: var(--paper-soft);
+}
+
+.phase-stepper .step.done .step-mark {
+  background: rgba(74, 222, 128, 0.16);
+  color: var(--ok);
+}
+
+.phase-stepper .step.current {
+  color: var(--paper);
+  background: rgba(255, 122, 26, 0.14);
+}
+
+.phase-stepper .step.current .step-mark {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: var(--signal-ink);
+}
+
+.mode-toggle-group {
+  border-color: var(--panel-line-strong);
+  border-radius: 8px;
+}
+
+.mode-btn {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 5px 12px;
+  background: var(--panel-solid);
+  color: var(--paper-faint);
+}
+
+.mode-btn.active {
+  background: var(--paper);
+  color: var(--space);
+}
+
+.sound-toggle {
+  width: 36px;
+  height: 32px;
+  border-color: var(--panel-line-strong);
+  background: var(--panel-solid);
+  color: var(--paper-faint);
+  border-radius: 8px;
+}
+
+.sound-toggle[aria-pressed="true"] {
+  color: var(--signal);
+}
+
+.resource-row {
+  height: 44px;
+  gap: 8px;
+  padding: 0 20px 8px;
+}
+
+.res-chip {
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 5px 12px;
+  border-color: var(--panel-line);
+  background: var(--panel-solid);
+  color: var(--paper);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.res-chip:hover {
+  border-color: var(--panel-line-strong);
+  background: var(--panel-raised);
+}
+
+.res-chip-label {
+  color: var(--paper-soft);
+  font-weight: 500;
+}
+
+.res-chip-value {
+  font-family: var(--font-data);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--paper);
+}
+
+.res-chip.bad {
+  background: rgba(255, 90, 90, 0.12);
+  border-color: rgba(255, 90, 90, 0.6);
+}
+
+.res-pill {
+  font-family: var(--font-data);
+  background: var(--panel-solid);
+  border-color: var(--panel-line);
+}
+
+.res-label {
+  font-family: var(--font-display);
+  color: var(--paper-soft);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- Type ---------- */
+.panel-heading,
+.reticle-title,
+.debrief-title,
+.brief-goal,
+.game-logo {
+  font-family: var(--font-display);
+  letter-spacing: 0.005em;
+  text-transform: none;
+  color: var(--paper);
+  text-shadow: none;
+}
+
+.panel-heading {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.05;
+  margin-bottom: 6px;
+}
+
+.reticle-title {
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.15;
+  margin: 6px 0 2px;
+}
+
+.reticle-sub {
+  font-size: 14px;
+  color: var(--sky);
+}
+
+.mission-brief {
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--paper);
+}
+
+.mission-limits {
+  font-size: 15px;
+  color: var(--paper-soft);
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--panel-line);
+}
+
+.mission-limits strong {
+  font-family: var(--font-data);
+  font-weight: 500;
+  color: var(--paper);
+}
+
+.console-subhint {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--paper-soft);
+}
+
+.console-section-label,
+.intel-hdr {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  color: var(--paper);
+  margin-top: 6px;
+}
+
+.intel-line,
+.reticle-specs-row {
+  font-size: 14px;
+  color: var(--paper-soft);
+}
+
+.chip-cost {
+  font-size: 13px;
+  color: var(--paper-faint);
+  font-family: var(--font-body);
+}
+
+/* ---------- Buttons ---------- */
+.primary-cta-btn {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  min-height: 48px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  background: var(--signal);
+  border: 1px solid var(--signal);
+  color: var(--signal-ink);
+  box-shadow: 0 6px 18px rgba(255, 122, 26, 0.28);
+  transition: background-color 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+}
+
+.primary-cta-btn:hover:not(:disabled) {
+  background: #ff8f3d;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(255, 122, 26, 0.36);
+  filter: none;
+}
+
+.primary-cta-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.primary-cta-btn:disabled {
+  background: var(--panel-raised);
+  border-color: var(--panel-line);
+  color: var(--paper-faint);
+  box-shadow: none;
+  opacity: 1;
+}
+
+.primary-cta-btn.ready,
+.primary-cta-btn.ignite {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: var(--signal-ink);
+  animation: none;
+}
+
+.primary-cta-btn.warn {
+  background: var(--warn);
+  border-color: var(--warn);
+  color: #1a1200;
+}
+
+.secondary-cta-btn,
+.secondary-hud-btn,
+.abort-hud-btn,
+.mini-toggle-btn,
+.stage-trigger-btn,
+.kap-expand-btn {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-line-strong);
+  color: var(--paper);
+  box-shadow: none;
+}
+
+.secondary-cta-btn:hover:not(:disabled),
+.secondary-hud-btn:hover,
+.mini-toggle-btn:hover,
+.kap-expand-btn:hover {
+  border-color: var(--paper-faint);
+  background: #1a2336;
+}
+
+.mini-toggle-btn {
+  font-size: 15px;
+  min-height: 36px;
+  padding: 4px 12px;
+}
+
+.mini-toggle-btn.active {
+  border-color: rgba(74, 222, 128, 0.6);
+  color: #b7f7cf;
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.abort-hud-btn {
+  color: #ffd2d2;
+  border-color: rgba(255, 90, 90, 0.55);
+  background: rgba(255, 90, 90, 0.1);
+}
+
+.kap-build-btn {
+  border-color: rgba(255, 122, 26, 0.6) !important;
+  color: #ffc896 !important;
+  background: rgba(255, 122, 26, 0.08) !important;
+}
+
+.kap-expand-btn {
+  font-size: 13px;
+  min-height: 26px;
+  padding: 2px 8px;
+}
+
+/* Option chips: missions, parts, stations, bands, sites */
+.target-chip,
+.sub-chip,
+.station-chip,
+.band-chip,
+.launch-site-chip,
+.part-tier-chip,
+.slot-dock-btn,
+.warp-btn,
+.hud-pill-btn {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  border-radius: 10px;
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-line);
+  color: var(--paper);
+  box-shadow: none;
+  transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+}
+
+.target-chip,
+.sub-chip {
+  padding: 10px 12px;
+  font-family: var(--font-display);
+  font-size: 17px;
+}
+
+.target-chip:hover,
+.sub-chip:hover,
+.station-chip:hover,
+.band-chip:hover,
+.launch-site-chip:hover,
+.part-tier-chip:hover,
+.slot-dock-btn:hover,
+.warp-btn:hover,
+.hud-pill-btn:hover {
+  border-color: var(--panel-line-strong);
+  background: #1a2336;
+}
+
+.target-chip.active,
+.sub-chip.active,
+.station-chip.active,
+.band-chip.active,
+.launch-site-chip.active,
+.part-tier-chip.selected,
+.slot-dock-btn.active,
+.warp-btn.active,
+.hud-pill-btn.active {
+  border-color: var(--signal);
+  background: rgba(255, 122, 26, 0.12);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px var(--signal);
+}
+
+.station-chip,
+.band-chip {
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.launch-site-chip strong {
+  font-size: 15px;
+}
+
+.launch-site-chip span,
+.launch-site-selected span {
+  font-size: 13px;
+  color: var(--paper-soft);
+}
+
+.launch-site-selected {
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+}
+
+.launch-site-selected strong {
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+
+.launch-site-selected p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--paper-soft);
+}
+
+/* ---------- Kap ---------- */
+.kap-comms-bubble {
+  width: 460px;
+  padding: 16px 18px;
+  gap: 14px;
+}
+
+.kap-comms-bubble.mood-concerned {
+  border-color: rgba(251, 191, 36, 0.6);
+}
+
+.kap-comms-bubble.mood-alert {
+  border-color: rgba(255, 90, 90, 0.75);
+  background: #1a0d12;
+}
+
+.kap-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--paper);
+}
+
+.kap-mood-pill {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.kap-message {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--paper);
+}
+
+.kap-contextual-tip {
+  font-size: 14px !important;
+  color: var(--paper-soft) !important;
+  font-style: normal !important;
+}
+
+.kap-conflict-item {
+  font-size: 14px;
+  background: var(--panel-raised);
+}
+
+/* ---------- Hangar ---------- */
+.hangar-bottom-dock {
+  padding: 14px 16px;
+  gap: 10px;
+}
+
+.part-inspector-bar {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--paper-soft);
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+}
+
+.part-inspector-bar strong {
+  color: var(--paper);
+}
+
+.part-tier-chip {
+  padding: 10px 12px;
+}
+
+.part-chip-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.part-chip-meta {
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--paper-soft);
+}
+
+.slot-dock-btn {
+  font-family: var(--font-display);
+  font-size: 16px;
+  padding: 8px 6px;
+}
+
+.slot-dock-btn.filled .slot-dot {
+  background: var(--ok);
+  box-shadow: none;
+}
+
+.slot-dock-btn.conflict {
+  border-color: rgba(255, 90, 90, 0.7);
+}
+
+.vab-readout-pill {
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--paper-soft);
+  padding: 8px 14px;
+}
+
+/* ---------- Flight ---------- */
+.flight-bottom-strip {
+  padding: 14px 16px;
+  gap: 10px;
+}
+
+.flight-goal-label {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--paper);
+}
+
+.flight-goal-value {
+  font-family: var(--font-data);
+  font-size: 18px;
+  color: var(--signal);
+}
+
+.flight-goal-track {
+  height: 10px;
+  background: var(--panel-raised);
+}
+
+.flight-goal-fill {
+  background: var(--signal);
+}
+
+.flight-goal-hint {
+  font-size: 15px;
+  color: var(--paper-soft);
+}
+
+.inst-pill {
+  background: var(--panel-raised);
+  border-color: var(--panel-line);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+.inst-k {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--paper-soft);
+}
+
+.inst-v {
+  font-family: var(--font-data);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--paper);
+}
+
+.warp-label,
+.stage-badge,
+.throttle-pct {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--paper-soft);
+}
+
+.warp-btn {
+  font-family: var(--font-data);
+  font-size: 13px;
+  min-width: 46px;
+  min-height: 34px;
+}
+
+.flight-phase-pill {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  padding: 8px 16px;
+  color: var(--paper);
+}
+
+/* ---------- Results ---------- */
+.debrief-frame {
+  padding: 24px 26px;
+}
+
+.debrief-title {
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.outcome-badge {
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+}
+
+.debrief-res-cell {
+  background: var(--panel-raised);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.debrief-cell-name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--paper);
+}
+
+.debrief-line.note.plain {
+  font-size: 15px;
+}
+
+/* ---------- Briefing modal ---------- */
+.tutorial-modal-backdrop {
+  background: rgba(3, 5, 10, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.tutorial-brief-card {
+  width: min(620px, calc(100vw - 32px));
+  padding: 34px 36px 26px;
+  border-top: 3px solid var(--signal);
+}
+
+.brief-mission {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--signal);
+}
+
+.brief-goal {
+  font-size: 36px;
+  line-height: 1.08;
+}
+
+.brief-why {
+  font-size: 17px;
+}
+
+.brief-traps-label {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: #ffb3a1;
+}
+
+.brief-traps {
+  font-size: 16px;
+}
+
+.brief-details-link {
+  font-size: 15px;
+}
+
+/* ---------- Title screen ---------- */
+.title-overlay {
+  padding: 0 7vw;
+  background: linear-gradient(90deg, rgba(5, 7, 13, 0.94) 0%, rgba(5, 7, 13, 0.66) 42%, rgba(5, 7, 13, 0) 72%);
+}
+
+.title-frame {
+  max-width: 560px;
+  padding: 0;
+  background: none;
+  backdrop-filter: none;
+  border: none;
+  box-shadow: none;
+}
+
+.title-badge {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--signal);
+  text-transform: none;
+}
+
+.game-logo {
+  font-size: clamp(56px, 7vw, 96px);
+  font-weight: 800;
+  line-height: 0.92;
+  margin: 10px 0 18px;
+  text-transform: uppercase;
+}
+
+.game-tagline {
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--paper-soft);
+  max-width: 34ch;
+}
+
+.hud-pill-btn {
+  padding: 14px 16px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  text-align: left;
+}
+
+.pill-sub {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--paper-soft);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.title-actions .primary-cta-btn {
+  min-height: 58px;
+  font-size: 23px;
+}
+
+.locked-cta-btn {
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--paper-faint);
+  background: transparent;
+  border: 1px dashed var(--panel-line-strong);
+  border-radius: 10px;
+}
+
+/* ---------- Learn modal (resource explainers) ---------- */
+.learn-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(3, 5, 10, 0.72);
+  backdrop-filter: blur(3px);
+  animation: fade-in 0.25s ease-out;
+}
+
+.learn-modal {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 30px 32px 24px;
+  border-radius: 16px;
+  background: var(--panel-solid);
+  border: 1px solid var(--panel-line);
+  border-top: 3px solid var(--signal);
+  box-shadow: var(--shadow);
+  animation: brief-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.learn-status {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 1px 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
+.learn-status.good {
+  color: var(--ok);
+}
+
+.learn-status.warn {
+  color: var(--warn);
+}
+
+.learn-status.bad {
+  color: var(--bad);
+}
+
+.learn-title {
+  margin: 10px 0 6px;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--paper);
+}
+
+.learn-now {
+  font-family: var(--font-data);
+  font-size: 15px;
+  color: var(--signal);
+  margin-bottom: 14px;
+}
+
+.learn-body {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--paper);
+  margin: 0 0 16px;
+}
+
+.learn-formula {
+  margin: 0 0 8px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-line);
+  font-family: var(--font-data);
+  font-size: 17px;
+  color: var(--paper);
+  text-align: center;
+}
+
+.learn-formula-note {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--paper-soft);
+  margin: 0 0 16px;
+}
+
+.learn-tip {
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--paper);
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 122, 26, 0.08);
+  border: 1px solid rgba(255, 122, 26, 0.35);
+  margin: 0 0 20px;
+}
+
+.learn-close {
+  width: 100%;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1280px) {
+  .phase-stepper .step:not(.current) .step-label {
+    display: none;
+  }
+}
+
+/* ---------- Mission cards (Beginner mission picker) ---------- */
+.mission-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 6px 0 4px;
+}
+
+.mission-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 76px;
+  padding: 14px 14px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-line);
+  background: var(--panel-raised);
+  color: var(--paper);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mission-card:hover {
+  border-color: var(--panel-line-strong);
+  background: #1a2336;
+  transform: translateY(-1px);
+}
+
+.mission-card.active {
+  border-color: var(--signal);
+  background: rgba(255, 122, 26, 0.12);
+  box-shadow: inset 0 0 0 1px var(--signal);
+}
+
+.mission-card-name {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.mission-card-level {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mission-card-level.lvl-0 { color: var(--ok); }
+.mission-card-level.lvl-1 { color: #a3e635; }
+.mission-card-level.lvl-2 { color: var(--warn); }
+.mission-card-level.lvl-3 { color: #ff8a65; }
+
+.reticle-button-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* ---------- Kap's action button ---------- */
+.kap-action-btn {
+  margin-top: 10px;
+  min-height: 40px;
+  padding: 6px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--signal);
+  background: rgba(255, 122, 26, 0.12);
+  color: #ffd2ad;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+
+.kap-action-btn:hover {
+  background: rgba(255, 122, 26, 0.24);
+  color: #fff;
+}
+
+.kap-header-row {
+  margin-bottom: 2px;
+}
+
+.kap-name {
+  font-size: 18px;
+}
+
+/* ---------- Kap's tour ---------- */
+.kap-tour {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+}
+
+.kap-tour-dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 5, 10, 0.6);
+  pointer-events: auto;
+  animation: fade-in 0.3s ease-out;
+}
+
+.kap-tour-spot {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(3, 5, 10, 0.6), 0 0 0 2px var(--signal), 0 0 24px 4px rgba(255, 122, 26, 0.45);
+  transition: top 0.35s cubic-bezier(0.16, 1, 0.3, 1), left 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    width 0.35s cubic-bezier(0.16, 1, 0.3, 1), height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: spot-pulse 2s ease-in-out infinite;
+}
+
+@keyframes spot-pulse {
+  50% {
+    box-shadow: 0 0 0 9999px rgba(3, 5, 10, 0.6), 0 0 0 2px var(--signal), 0 0 36px 8px rgba(255, 122, 26, 0.6);
+  }
+}
+
+.kap-tour-card {
+  position: fixed;
+  pointer-events: auto;
+  padding: 20px 22px 18px;
+  border-radius: 16px;
+  background: var(--panel-solid);
+  border: 1px solid var(--panel-line-strong);
+  border-top: 3px solid var(--signal);
+  box-shadow: var(--shadow);
+  animation: brief-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.kap-tour-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kap-tour-count {
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--paper-faint);
+}
+
+.kap-tour-title {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--paper);
+}
+
+.kap-tour-text {
+  margin: 12px 0 16px;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--paper);
+}
+
+.kap-tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kap-tour-skip {
+  min-height: 40px;
+  padding: 6px 4px;
+  background: none;
+  border: none;
+  color: var(--paper-faint);
+  font-family: var(--font-body);
+  font-size: 15px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.kap-tour-skip:hover {
+  color: var(--paper);
+}
+
+.kap-tour-next {
+  min-width: 120px;
+}
+
+.kap-tour-waiting {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--signal);
+}
+
+/* ---------- Learn modal: formula tucked away ---------- */
+.learn-math summary {
+  font-size: 15px;
+  color: var(--paper-soft);
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.learn-math summary:hover {
+  color: var(--paper);
+}
+
+.learn-math[open] {
+  margin-bottom: 14px;
+}
+
+/* ---------- Hit areas and text fit ---------- */
+.res-chip,
+.sound-toggle,
+.mode-btn {
+  min-height: 34px;
+}
+
+.top-mission-tag {
+  overflow: hidden;
+}
+
+.mission-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.launch-site-chip {
+  min-height: 56px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.launch-site-chip strong,
+.launch-site-chip span {
+  display: block;
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.part-tier-chip,
+.station-chip,
+.band-chip,
+.slot-dock-btn {
+  white-space: normal;
+  line-height: 1.25;
+}
+
+.slot-dock-btn {
+  min-height: 44px;
+}
+
+.warp-btn {
+  min-height: 38px;
+}
+
+.kap-message {
+  overflow-wrap: anywhere;
+}
+
+.kap-tour-head .kap-svg {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
 }

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { MISSIONS } from '../core/constants';
 import { useMissionStore } from '../store/useMissionStore';
 import type { MissionId } from '../core/types';
+import { MISSION_PLAIN } from './plainText';
 
 interface MissionGuidance {
   badge: string;
@@ -163,13 +164,58 @@ export const TutorialOverlay: React.FC = () => {
   const acknowledgeTutorialAndEnterHangar =
     useMissionStore((s) => s.acknowledgeTutorialAndEnterHangar);
 
+  const applyRecommendedLoadout = useMissionStore((s) => s.applyRecommendedLoadout);
   const [activeTab, setActiveTab] = useState<'MISSION' | 'RULES' | 'CONCEPTS'>('MISSION');
+  const [showDetails, setShowDetails] = useState(false);
 
   if (!tutorialOpen) return null;
 
   const mission = MISSIONS[missionId];
   const guide = MISSION_GUIDES[missionId];
   const isInsideHangar = phase === 'HANGAR';
+
+  const enter = (withKap: boolean) => {
+    if (isInsideHangar) closeTutorial();
+    else acknowledgeTutorialAndEnterHangar();
+    if (withKap) applyRecommendedLoadout();
+    setShowDetails(false);
+  };
+
+  if (!showDetails) {
+    return (
+      <div className="tutorial-modal-backdrop" data-testid="tutorial-overlay">
+        <div className="tutorial-brief-card" role="dialog" aria-labelledby="brief-goal">
+          <div className="brief-mission">{MISSION_PLAIN[missionId].name}</div>
+          <h2 className="brief-goal" id="brief-goal">{MISSION_PLAIN[missionId].goal(mission.targetScienceMb)}</h2>
+          <p className="brief-why">
+            First, build the spacecraft. You can pick every part yourself, or let Kap do it.
+          </p>
+
+          <div className="brief-actions">
+            <button
+              type="button"
+              className="primary-cta-btn ready"
+              onClick={() => enter(true)}
+              data-testid="tutorial-kap-build-btn"
+            >
+              Let Kap build it for me
+            </button>
+            <button
+              type="button"
+              className="secondary-hud-btn"
+              onClick={() => enter(false)}
+              data-testid={isInsideHangar ? 'tutorial-close-btn' : 'tutorial-ack-btn'}
+            >
+              {isInsideHangar ? 'Back to building' : "I'll build it myself"}
+            </button>
+          </div>
+          <button type="button" className="brief-details-link" onClick={() => setShowDetails(true)}>
+            Show me the full parts guide
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="tutorial-modal-backdrop" data-testid="tutorial-overlay">
@@ -430,25 +476,16 @@ export const TutorialOverlay: React.FC = () => {
 
         {/* Modal Actions */}
         <div className="tutorial-modal-footer">
-          {isInsideHangar ? (
-            <button
-              type="button"
-              className="primary-cta-btn ready"
-              onClick={closeTutorial}
-              data-testid="tutorial-close-btn"
-            >
-              CLOSE GUIDE &amp; CONTINUE BUILDING
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="primary-cta-btn ready pulse-btn"
-              onClick={acknowledgeTutorialAndEnterHangar}
-              data-testid="tutorial-ack-btn"
-            >
-              I UNDERSTAND HOW TO WIN — ENTER VAB HANGAR ➔
-            </button>
-          )}
+          <button type="button" className="secondary-hud-btn" onClick={() => setShowDetails(false)}>
+            Back to the short version
+          </button>
+          <button
+            type="button"
+            className="primary-cta-btn ready"
+            onClick={() => enter(false)}
+          >
+            {isInsideHangar ? 'Back to building' : 'Start building'}
+          </button>
         </div>
       </div>
     </div>

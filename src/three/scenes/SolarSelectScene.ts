@@ -193,7 +193,9 @@ export class SolarSelectScene implements SceneController {
     this.moonBeacon.visible = showBeacons;
     this.marsBeacon.visible = showBeacons;
 
-    const showSubBeacons = showBeacons && state.exploreSubChoiceOpen;
+    // The floating green/purple probe icons had no label, so players could not tell
+    // what they were. Missions are picked from the panel instead.
+    const showSubBeacons = false;
     this.eoProbeGroup.visible = showSubBeacons;
     this.telescopeProbeGroup.visible = showSubBeacons;
 
@@ -282,9 +284,6 @@ export class SolarSelectScene implements SceneController {
       this.marsBeacon,
       this.exploreRing,
     ];
-    if (state.exploreSubChoiceOpen) {
-      targets.push(this.eoProbeGroup, this.telescopeProbeGroup);
-    }
 
     const hits = raycaster.intersectObjects(targets, true);
     if (hits.length > 0) {
@@ -328,9 +327,6 @@ export class SolarSelectScene implements SceneController {
       this.marsBeacon,
       this.exploreRing,
     ];
-    if (state.exploreSubChoiceOpen) {
-      targets.push(this.eoProbeGroup, this.telescopeProbeGroup);
-    }
     const hits = raycaster.intersectObjects(targets, true);
     if (hits.length === 0) return;
 

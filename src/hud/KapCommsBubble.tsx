@@ -1,11 +1,26 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { engine } from '../audio/sound';
 import { MISSIONS } from '../core/constants';
 import { evaluateGroundSegment } from '../core/groundSegment';
 import { validateSpacecraft } from '../core/spacecraftValidator';
 import type { CoupledMetrics, EngineeringConflict, MissionSpec } from '../core/types';
 import { useMissionStore } from '../store/useMissionStore';
 
-type KapMood = 'HAPPY' | 'CONCERNED' | 'ALERT';
+import { KapFace, type KapMood } from './KapFace';
+import { useTourVisible } from './KapTour';
+
+/** Plays Kap's comm blip when the message changes (at most once every 1.5 s). */
+const KapChime: React.FC<{ headline: string; mood: KapMood }> = ({ headline, mood }) => {
+  const last = useRef({ headline: '', at: 0 });
+  useEffect(() => {
+    if (!headline || headline === last.current.headline) return;
+    const now = performance.now();
+    const quiet = now - last.current.at < 1500;
+    last.current = { headline, at: quiet ? last.current.at : now };
+    if (!quiet && engine.ready) engine.kap(mood);
+  }, [headline, mood]);
+  return null;
+};
 
 export const KapCommsBubble: React.FC = () => {
   const phase = useMissionStore((s) => s.phase);
@@ -19,6 +34,8 @@ export const KapCommsBubble: React.FC = () => {
   const launchCoupledMetrics = useMissionStore((s) => s.launchCoupledMetrics);
 
   const [expanded, setExpanded] = useState(false);
+  const store = useMissionStore.getState();
+  const tourVisible = useTourVisible();
 
   if (phase === 'TITLE') return null;
 
@@ -35,7 +52,7 @@ export const KapCommsBubble: React.FC = () => {
     mood = 'HAPPY';
     headline =
       difficulty === 'BEGINNER'
-        ? `Pick a target in 3D space! ${mission.beginnerBrief}`
+        ? 'Pick a mission on the right. Orbit Earth is the easiest first flight.'
         : `${mission.title} — ${mission.realisticBrief}`;
   } else if (phase === 'HANGAR') {
     const val = validateSpacecraft(missionId, spacecraft, difficulty, ground);
@@ -53,6 +70,12 @@ export const KapCommsBubble: React.FC = () => {
     if (coupled) {
       contextualTip = getHangarContextualTip(coupled, mission, difficulty);
     }
+  } else if (phase === 'LAUNCH_SITE') {
+    mood = 'HAPPY';
+    headline =
+      difficulty === 'BEGINNER'
+        ? 'Pick where your rocket launches from. Kennedy Space Center in Florida is a great first choice.'
+        : 'Select a launch range. Site latitude sets your minimum orbital inclination and how much boost Earth\'s spin gives you.';
   } else if (phase === 'GROUND_SEGMENT') {
     const ge = evaluateGroundSegment(missionId, spacecraft, ground, difficulty);
     conflicts = ge.conflicts;
@@ -97,10 +120,39 @@ export const KapCommsBubble: React.FC = () => {
     headline = debrief.kapSummary;
   }
 
-  const ledColor =
-    mood === 'HAPPY' ? '#34d399' : mood === 'CONCERNED' ? '#f59e0b' : '#ef4444';
-  const visorAccent =
-    mood === 'HAPPY' ? '#38bdf8' : mood === 'CONCERNED' ? '#fbbf24' : '#f87171';
+  // In Beginner, Kap offers the one action that moves the player forward.
+  const isBeginner = difficulty === 'BEGINNER';
+  let action: { label: string; run: () => void } | null = null;
+  if (phase === 'HANGAR') {
+    const val = validateSpacecraft(missionId, spacecraft, difficulty, ground);
+    if (!val.isLaunchable) {
+      action = { label: val.isComplete ? 'Fix it for me' : 'Build it for me', run: store.applyRecommendedLoadout };
+      if (isBeginner && !val.isComplete && conflicts.length === 0) {
+        headline = 'A spacecraft needs 8 parts. Pick them below, or let me build it.';
+      }
+    } else {
+      if (isBeginner) headline = 'Looks great! Everything is green. Next, pick where to launch.';
+      action = { label: 'Next', run: store.rolloutToGround };
+    }
+  } else if (phase === 'LAUNCH_SITE') {
+    action = { label: 'Continue', run: store.confirmLaunchSite };
+  } else if (phase === 'GROUND_SEGMENT') {
+    const ge = evaluateGroundSegment(missionId, spacecraft, ground, difficulty);
+    if (!ge.canGreenlight) {
+      action = { label: 'Set it up for me', run: store.applyRecommendedGround };
+    } else {
+      if (isBeginner) headline = 'Radio dishes are ready to catch your data. Ready when you are!';
+      action = { label: 'Go for launch', run: store.greenlightLiftoff };
+    }
+  } else if (phase === 'FLIGHT' && flight?.status === 'PRELAUNCH') {
+    if (isBeginner) headline = 'Your rocket is on the pad. Press Launch and the autopilot does the flying.';
+    action = { label: 'Launch', run: store.igniteLaunch };
+  } else if (phase === 'DEBRIEF' && debrief && debrief.outcome !== 'SUCCESS') {
+    action = { label: 'Fix my design', run: store.returnToHangarKeepDesign };
+  }
+  if (isBeginner && phase === 'FLIGHT' && flight) headline = plainFlight(headline);
+
+  if (tourVisible) return null;
 
   return (
     <aside
@@ -108,74 +160,21 @@ export const KapCommsBubble: React.FC = () => {
       data-testid="kap-comms-bubble"
       data-kap-mood={mood}
     >
-      <div className="kap-avatar-wrap" aria-hidden="true">
-        <svg viewBox="0 0 72 72" className="kap-svg">
-          {/* Helmet outer shell */}
-          <circle
-            cx="36"
-            cy="36"
-            r="31"
-            fill="#0f1b33"
-            stroke={ledColor}
-            strokeWidth="2.5"
-          />
-          {/* Headset ear pods */}
-          <rect x="2" y="26" width="7" height="20" rx="3.5" fill="#1e293b" stroke="#64748b" strokeWidth="1.5" />
-          <rect x="63" y="26" width="7" height="20" rx="3.5" fill="#1e293b" stroke="#64748b" strokeWidth="1.5" />
-          {/* Visor inner cavity */}
-          <rect x="13" y="16" width="46" height="36" rx="16" fill="#071122" stroke={visorAccent} strokeWidth="1.6" />
-          {/* Visor reflection */}
-          <path d="M 19 22 Q 28 18 42 20" stroke="rgba(255,255,255,0.28)" strokeWidth="2.4" fill="none" strokeLinecap="round" />
-
-          {/* Expressive Eyes & Eyebrows */}
-          {mood === 'HAPPY' && (
-            <>
-              <path d="M 23 30 Q 27 27 31 30" stroke="#7dd3fc" strokeWidth="2" fill="none" strokeLinecap="round" />
-              <path d="M 41 30 Q 45 27 49 30" stroke="#7dd3fc" strokeWidth="2" fill="none" strokeLinecap="round" />
-              <circle cx="27" cy="34" r="2.7" fill="#e0f2fe" />
-              <circle cx="45" cy="34" r="2.7" fill="#e0f2fe" />
-              <path d="M 29 42 Q 36 47 43 42" stroke="#34d399" strokeWidth="2.4" fill="none" strokeLinecap="round" />
-            </>
-          )}
-          {mood === 'CONCERNED' && (
-            <>
-              <line x1="22" y1="30" x2="31" y2="28" stroke="#fcd34d" strokeWidth="2.2" strokeLinecap="round" />
-              <line x1="41" y1="28" x2="50" y2="30" stroke="#fcd34d" strokeWidth="2.2" strokeLinecap="round" />
-              <circle cx="27" cy="34" r="2.6" fill="#fef3c7" />
-              <circle cx="45" cy="34" r="2.6" fill="#fef3c7" />
-              <path d="M 30 44 Q 36 42 42 44" stroke="#f59e0b" strokeWidth="2.3" fill="none" strokeLinecap="round" />
-            </>
-          )}
-          {mood === 'ALERT' && (
-            <>
-              <line x1="22" y1="28" x2="31" y2="32" stroke="#fca5a5" strokeWidth="2.4" strokeLinecap="round" />
-              <line x1="41" y1="32" x2="50" y2="28" stroke="#fca5a5" strokeWidth="2.4" strokeLinecap="round" />
-              <circle cx="27" cy="35" r="2.8" fill="#fee2e2" />
-              <circle cx="45" cy="35" r="2.8" fill="#fee2e2" />
-              <ellipse cx="36" cy="44" rx="4.5" ry="3.2" fill="none" stroke="#ef4444" strokeWidth="2.2" />
-            </>
-          )}
-
-          {/* Mic boom & status LED */}
-          <path d="M 65 42 Q 58 53 45 53" stroke="#94a3b8" strokeWidth="2" fill="none" strokeLinecap="round" />
-          <circle cx="44" cy="53" r="2.4" fill={ledColor} />
-          <circle cx="36" cy="8" r="2.5" fill={ledColor} />
-        </svg>
+      <KapChime headline={headline} mood={mood} />
+      <div className="kap-avatar-wrap">
+        <KapFace mood={mood} />
       </div>
 
       <div className="kap-text-col">
         <div className="kap-header-row">
-          <span className="kap-name">KAP // FLIGHT ENGINEER</span>
-          <span className="kap-mood-pill" style={{ color: ledColor, borderColor: ledColor }}>
-            {mood}
-          </span>
+          <span className="kap-name">Kap</span>
           {conflicts.length > 1 && (
             <button
               type="button"
               className="kap-expand-btn"
               onClick={() => setExpanded((v) => !v)}
             >
-              {expanded ? 'HIDE' : `+${conflicts.length - 1} MORE`}
+              {expanded ? 'Hide' : `${conflicts.length - 1} more`}
             </button>
           )}
         </div>
@@ -183,25 +182,45 @@ export const KapCommsBubble: React.FC = () => {
           {headline}
         </p>
 
-        {contextualTip && (
-          <p className="kap-contextual-tip" style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '0.5rem', fontStyle: 'italic' }}>
-            {contextualTip}
-          </p>
+        {!isBeginner && contextualTip && (
+          <p className="kap-contextual-tip">{contextualTip}</p>
         )}
 
         {expanded && conflicts.length > 1 && (
           <div className="kap-conflict-list">
             {conflicts.slice(1).map((c) => (
               <div key={c.id} className={`kap-conflict-item sev-${c.severity.toLowerCase()}`}>
-                {difficulty === 'BEGINNER' ? c.beginnerMessage : c.realisticMessage}
+                {isBeginner ? c.beginnerMessage : c.realisticMessage}
               </div>
             ))}
           </div>
+        )}
+
+        {action && (
+          <button type="button" className="kap-action-btn" onClick={action.run} data-testid="kap-action-btn">
+            {action.label}
+          </button>
         )}
       </div>
     </aside>
   );
 };
+
+/** Turns engineering flight callouts into words a first-time player understands. */
+function plainFlight(msg: string): string {
+  const rules: [RegExp, string][] = [
+    [/MECO|stage 2 ignition/i, 'First stage done! The second engine takes over.'],
+    [/liftoff|ignition confirmed/i, 'Liftoff! We are on our way up.'],
+    [/parking orbit|orbit achieved|stable/i, 'We made it to orbit! The camera is starting work.'],
+    [/TLI|trans-?lunar/i, 'Engines on! Heading for the Moon.'],
+    [/TMI|trans-?mars/i, 'Engines on! Heading for Mars.'],
+    [/fairing/i, 'The nose cover just popped off. We are above the air now.'],
+    [/touchdown|landed/i, 'Touchdown! We landed safely.'],
+    [/telemetry nominal/i, 'Everything looks good.'],
+  ];
+  for (const [re, plain] of rules) if (re.test(msg)) return plain;
+  return msg;
+}
 
 function getHangarContextualTip(coupled: CoupledMetrics, _mission: MissionSpec, difficulty: string): string {
   const tips: string[] = [];

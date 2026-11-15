@@ -296,8 +296,16 @@ export const useMissionStore = create<MissionStoreState>((set, get) => ({
 
   applyRecommendedLoadout: () => {
     const { missionId } = get();
+    // Kap sets up the whole mission, radio included, so the next screen
+    // doesn't flag a problem the auto-build created.
+    const rec = RECOMMENDED_GROUND[missionId];
     set({
       spacecraft: { ...RECOMMENDED_LOADOUTS[missionId] },
+      ground: {
+        activeStationIds: [...rec.activeStationIds],
+        bandId: rec.bandId,
+        plannedLifetimeYears: rec.plannedLifetimeYears,
+      },
     });
     // Recompute coupled metrics after state update
     get().recomputeCoupledMetrics();

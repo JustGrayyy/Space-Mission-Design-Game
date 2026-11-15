@@ -16,6 +16,7 @@ import type {
   SubsystemCategory,
 } from '../core/types';
 import { useMissionStore } from '../store/useMissionStore';
+import { MISSION_ORDER, MISSION_PLAIN } from './plainText';
 
 function formatDeltaHtml(deltas: HoverDelta): React.ReactNode {
   const badges: React.ReactElement[] = [];
@@ -31,16 +32,38 @@ function formatDeltaHtml(deltas: HoverDelta): React.ReactNode {
   return badges;
 }
 
-const SUBSYSTEM_SLOTS: { key: SubsystemCategory; label: string }[] = [
-  { key: 'structure', label: 'FRAME' },
-  { key: 'power', label: 'POWER' },
-  { key: 'battery', label: 'BATTERY' },
-  { key: 'computer', label: 'CPU' },
-  { key: 'adcs', label: 'ADCS' },
-  { key: 'thermal', label: 'THERMAL' },
-  { key: 'payload', label: 'PAYLOAD' },
-  { key: 'launcher', label: 'ROCKET' },
+const SUBSYSTEM_SLOTS: { key: SubsystemCategory; label: string; plain: string }[] = [
+  { key: 'structure', label: 'FRAME', plain: 'Frame' },
+  { key: 'power', label: 'POWER', plain: 'Power' },
+  { key: 'battery', label: 'BATTERY', plain: 'Battery' },
+  { key: 'computer', label: 'CPU', plain: 'Computer' },
+  { key: 'adcs', label: 'ADCS', plain: 'Steering' },
+  { key: 'thermal', label: 'THERMAL', plain: 'Heat control' },
+  { key: 'payload', label: 'PAYLOAD', plain: 'Science tool' },
+  { key: 'launcher', label: 'ROCKET', plain: 'Rocket' },
 ];
+
+const FLIGHT_STATUS_PLAIN: Record<string, string> = {
+  PRELAUNCH: 'On the pad',
+  ASCENT: 'Climbing',
+  ORBIT: 'In orbit',
+  TRANSIT: 'Cruising to target',
+  TARGET_CAPTURE: 'Arriving',
+  LANDING: 'Landing',
+  SUCCESS: 'Success',
+  FAILED: 'Lost',
+};
+
+const PLAIN_RESOURCE: Record<ResourceKey, string> = {
+  mass: 'Weight & fuel',
+  power: 'Power',
+  budget: 'Money',
+  data: 'Science',
+  comms: 'Radio',
+  time: 'Schedule',
+};
+
+const PLAIN_STATUS: Record<string, string> = { OPTIMAL: 'Great', WARNING: 'Close call', CRITICAL: 'Problem' };
 
 const RESOURCE_LABELS: Record<ResourceKey, string> = {
   mass: 'MASS & Δv',
@@ -89,6 +112,7 @@ export const PhaseHudOverlay: React.FC = () => {
   const toggleStation = useMissionStore((s) => s.toggleStation);
   const setCommsBand = useMissionStore((s) => s.setCommsBand);
   const setPlannedLifetime = useMissionStore((s) => s.setPlannedLifetime);
+  const applyRecommendedGround = useMissionStore((s) => s.applyRecommendedGround);
   const greenlightLiftoff = useMissionStore((s) => s.greenlightLiftoff);
   const igniteLaunch = useMissionStore((s) => s.igniteLaunch);
   const setThrottle = useMissionStore((s) => s.setThrottle);
@@ -126,11 +150,11 @@ export const PhaseHudOverlay: React.FC = () => {
     return (
       <div className="hud-layer title-overlay" data-testid="title-screen">
         <div className="title-frame">
-          <div className="title-badge">NASA SPACEAPPS // FLIGHT ENGINEERING SIM</div>
-          <h1 className="game-logo">ORBITAL ARCHITECT 3D</h1>
+          <div className="title-badge">NASA Space Apps 2026 · Team CyberSects</div>
+          <h1 className="game-logo">Orbital<br />Architect</h1>
           <p className="game-tagline">
-            Design spacecraft buses, balance power &amp; radio links, and fly orbital or
-            interplanetary missions in real-time 3D.
+            Design a spacecraft, launch it, and fly a real mission to Earth orbit, the Moon or
+            Mars. Every choice costs something.
           </p>
 
           <div className="title-mode-row" role="group" aria-label="Flight Difficulty">
@@ -140,8 +164,8 @@ export const PhaseHudOverlay: React.FC = () => {
               className={`hud-pill-btn ${difficulty === 'BEGINNER' ? 'active' : ''}`}
               onClick={() => setDifficulty('BEGINNER')}
             >
-              BEGINNER MODE
-              <span className="pill-sub">Plain-English Tips &amp; Flight Assist</span>
+              Beginner
+              <span className="pill-sub">Plain-English tips, autopilot flies for you</span>
             </button>
             <button
               type="button"
@@ -149,8 +173,8 @@ export const PhaseHudOverlay: React.FC = () => {
               className={`hud-pill-btn ${difficulty === 'REALISTIC' ? 'active' : ''}`}
               onClick={() => setDifficulty('REALISTIC')}
             >
-              REALISTIC MODE
-              <span className="pill-sub">Full Δv, Isp &amp; Manual Steering</span>
+              Realistic
+              <span className="pill-sub">Full telemetry, you steer the rocket</span>
             </button>
           </div>
 
@@ -161,7 +185,7 @@ export const PhaseHudOverlay: React.FC = () => {
               className="primary-cta-btn"
               onClick={startSingleplayer}
             >
-              SINGLEPLAYER MISSION
+              Start a mission
             </button>
             <button
               type="button"
@@ -170,7 +194,7 @@ export const PhaseHudOverlay: React.FC = () => {
               disabled
               aria-disabled="true"
             >
-              MULTIPLAYER (LOCKED — COMING SOON)
+              Team mode for up to 4 players · coming soon
             </button>
           </div>
         </div>
@@ -183,7 +207,44 @@ export const PhaseHudOverlay: React.FC = () => {
     return (
       <div className="hud-layer pointer-pass" data-testid="objective-select-hud">
         <div className="tactical-reticle">
-          <div className="reticle-kicker">PHASE 1 // TARGET ACQUISITION</div>
+          <h2 className="panel-heading">Choose your mission</h2>
+
+          {isBeginner ? (
+            <>
+              <div className="mission-cards" data-testid="mission-cards">
+                {MISSION_ORDER.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    data-testid={`mission-card-${id}`}
+                    className={`mission-card ${missionId === id ? 'active' : ''}`}
+                    aria-pressed={missionId === id}
+                    onClick={() => {
+                      if (id === 'EARTH_OBSERVATION' || id === 'SPACE_TELESCOPE') {
+                        selectTopObjective('EXPLORE_SPACE');
+                        selectExploreSubMission(id);
+                      } else {
+                        selectTopObjective(id);
+                      }
+                    }}
+                  >
+                    <span className="mission-card-name">{MISSION_PLAIN[id].name}</span>
+                    <span className={`mission-card-level lvl-${MISSION_ORDER.indexOf(id)}`}>{MISSION_PLAIN[id].level}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mission-brief">{MISSION_PLAIN[missionId].goal(mission.targetScienceMb)}</p>
+              <div className="reticle-button-row">
+                <button type="button" data-testid="back-to-title-btn" className="secondary-cta-btn" onClick={backToTitle}>
+                  Back
+                </button>
+                <button type="button" data-testid="enter-hangar-btn" className="primary-cta-btn" onClick={requestEnterHangar}>
+                  Next: build it
+                </button>
+              </div>
+            </>
+          ) : (
+          <>
 
           <div className="target-chip-row">
             <button
@@ -235,16 +296,26 @@ export const PhaseHudOverlay: React.FC = () => {
 
           <div className="reticle-divider" />
 
-          <h2 className="reticle-title">{mission.title}</h2>
+          <h3 className="reticle-title">{mission.title}</h3>
           <div className="reticle-sub">{mission.subtitle}</div>
 
-          <div className="reticle-specs-row">
-            <span>Δv TARGET: {mission.targetDeltaVMs} m/s</span>
-            <span>CAP: ${mission.budgetCapM}M</span>
-            <span>WINDOW: {mission.scheduleLimitMonths} mo</span>
-          </div>
+          {isBeginner ? (
+            <>
+              <p className="mission-brief">{mission.beginnerBrief}</p>
+              <div className="mission-limits">
+                <span>Budget <strong>${mission.budgetCapM}M</strong></span>
+                <span>Build time <strong>{mission.scheduleLimitMonths} months</strong></span>
+              </div>
+            </>
+          ) : (
+            <div className="reticle-specs-row">
+              <span>Δv TARGET: {mission.targetDeltaVMs} m/s</span>
+              <span>CAP: ${mission.budgetCapM}M</span>
+              <span>WINDOW: {mission.scheduleLimitMonths} mo</span>
+            </div>
+          )}
 
-          <div className="reticle-intel">
+          {!isBeginner && <div className="reticle-intel">
             <div className="intel-col">
               <div className="intel-hdr pros">ADVANTAGES</div>
               {mission.pros.map((p) => (
@@ -261,7 +332,7 @@ export const PhaseHudOverlay: React.FC = () => {
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
 
           <div className="reticle-button-row">
             <button
@@ -270,7 +341,7 @@ export const PhaseHudOverlay: React.FC = () => {
               className="secondary-cta-btn"
               onClick={backToTitle}
             >
-              ← BACK
+              Back
             </button>
             <button
               type="button"
@@ -278,9 +349,11 @@ export const PhaseHudOverlay: React.FC = () => {
               className="primary-cta-btn"
               onClick={requestEnterHangar}
             >
-              ENTER VAB HANGAR
+              Next: build it
             </button>
           </div>
+          </>
+          )}
         </div>
       </div>
     );
@@ -290,6 +363,10 @@ export const PhaseHudOverlay: React.FC = () => {
   if (phase === 'HANGAR') {
     const val = validateSpacecraft(missionId, spacecraft, difficulty, ground);
     const activeCat: SubsystemCategory = activeSnapCategory ?? 'structure';
+
+    const filledCount = SUBSYSTEM_SLOTS.filter((slot) =>
+      slot.key === 'launcher' ? spacecraft.launcherId : spacecraft[`${slot.key}Id` as keyof typeof spacecraft]
+    ).length;
 
     const conflictCats = new Set<string>(
       val.conflicts.map((c) => c.affectedCategory)
@@ -328,10 +405,16 @@ export const PhaseHudOverlay: React.FC = () => {
       <div className="hud-layer pointer-pass" data-testid="hangar-hud">
         {/* Right-edge Quick Hangar Actions */}
         <div className="hangar-right-actions">
-          <div className="vab-readout-pill">
-            <span>PAD TWR: {val.mass.padTwr.toFixed(2)}</span>
-            <span>TOTAL Δv: {Math.round(val.mass.totalDeltaVMs)} m/s</span>
-          </div>
+          {isBeginner ? (
+            <div className="vab-readout-pill">
+              <span>{filledCount} of 8 parts chosen</span>
+            </div>
+          ) : (
+            <div className="vab-readout-pill">
+              <span>PAD TWR: {val.mass.padTwr.toFixed(2)}</span>
+              <span>TOTAL Δv: {Math.round(val.mass.totalDeltaVMs)} m/s</span>
+            </div>
+          )}
 
           <button
             type="button"
@@ -343,10 +426,10 @@ export const PhaseHudOverlay: React.FC = () => {
             onClick={rolloutToGround}
           >
             {val.isLaunchable
-              ? 'ROLL OUT TO GROUND CONTROL'
+              ? 'Next: pick a launch site'
               : val.isComplete
-                ? 'ROLL OUT (CONFLICTS ACTIVE)'
-                : 'EQUIP ALL 8 SLOTS'}
+                ? 'Next (Kap sees problems)'
+                : `Choose all 8 parts (${filledCount}/8)`}
           </button>
         </div>
 
@@ -360,7 +443,7 @@ export const PhaseHudOverlay: React.FC = () => {
               className="secondary-cta-btn"
               onClick={backToObjectiveSelect}
             >
-              ← BACK TO MISSION SELECT
+              Back to missions
             </button>
 
             <button
@@ -369,23 +452,23 @@ export const PhaseHudOverlay: React.FC = () => {
               className="secondary-hud-btn guide-btn"
               onClick={openTutorial}
             >
-              📖 HOW TO WIN GUIDE
+              How to win
             </button>
 
             <button
               type="button"
               data-testid="kap-auto-engineer-btn"
-              className="secondary-hud-btn"
+              className="secondary-hud-btn kap-build-btn"
               onClick={applyRecommendedLoadout}
             >
-              KAP AUTO-ENGINEER
+              Let Kap build it
             </button>
           </div>
 
           {inspectedOpt && (
             <div className="part-inspector-bar">
               <strong>{inspectedOpt.name}:</strong> {inspectedOpt.desc}
-              {previewCandidate && previewCandidate.deltas && (
+              {!isBeginner && previewCandidate && previewCandidate.deltas && (
                 <div className="hover-delta-badges">
                   {formatDeltaHtml(previewCandidate.deltas)}
                 </div>
@@ -399,7 +482,7 @@ export const PhaseHudOverlay: React.FC = () => {
               const isHovered = hoveredPartId === opt.id;
               // Compute inline deltas for hovered part
               let inlineDeltas: string[] = [];
-              if (isHovered && previewCandidate && previewCandidate.deltas) {
+              if (!isBeginner && isHovered && previewCandidate && previewCandidate.deltas) {
                 const d = previewCandidate.deltas;
                 if (d.deltaMassKg !== 0) inlineDeltas.push(`${d.deltaMassKg > 0 ? '+' : ''}${d.deltaMassKg} kg`);
                 if (d.deltaDvMs !== 0) inlineDeltas.push(`${d.deltaDvMs > 0 ? '+' : ''}${d.deltaDvMs} m/s Δv`);
@@ -463,7 +546,7 @@ export const PhaseHudOverlay: React.FC = () => {
                   onClick={() => setActiveSnapCategory(slot.key)}
                 >
                   <span className="slot-dot" />
-                  <span>{slot.label}</span>
+                  <span>{isBeginner ? slot.plain : slot.label}</span>
                 </button>
               );
             })}
@@ -479,12 +562,12 @@ export const PhaseHudOverlay: React.FC = () => {
     return (
       <div className="hud-layer pointer-pass" data-testid="launch-site-hud">
         <div className="launch-site-console">
-          <div className="reticle-kicker">PHASE 3 // LAUNCH SITE SELECTION</div>
-          <div className="console-subhint">Click a marker on Earth or choose a launch range below</div>
+          <h2 className="panel-heading">Pick a launch site</h2>
+          <div className="console-subhint">Click a marker on Earth or pick from the list.</div>
           <div className="launch-site-selected" data-testid="selected-launch-site">
             <strong>{selectedSite?.name}</strong>
             <span>{selectedSite?.operator} · {selectedSite?.country}</span>
-            <span>{selectedSite?.latDeg.toFixed(3)}°, {selectedSite?.lonDeg.toFixed(3)}°</span>
+            {!isBeginner && <span>{selectedSite?.latDeg.toFixed(3)}°, {selectedSite?.lonDeg.toFixed(3)}°</span>}
             <p>{selectedSite?.description}</p>
           </div>
           <div className="launch-site-list">
@@ -503,7 +586,7 @@ export const PhaseHudOverlay: React.FC = () => {
           </div>
           <div className="ground-cta-row">
             <button type="button" className="secondary-hud-btn" onClick={backToHangar}>
-              BACK TO VAB
+              Back
             </button>
             <button
               type="button"
@@ -511,7 +594,7 @@ export const PhaseHudOverlay: React.FC = () => {
               className="primary-cta-btn"
               onClick={confirmLaunchSite}
             >
-              CONTINUE TO GROUND CONTROL
+              Next: mission control
             </button>
           </div>
         </div>
@@ -528,12 +611,24 @@ export const PhaseHudOverlay: React.FC = () => {
     return (
       <div className="hud-layer pointer-pass" data-testid="ground-segment-hud">
         <div className="ground-console">
-          <div className="reticle-kicker">PHASE 3 // DSN &amp; COMMS GREENLIGHT</div>
+          <h2 className="panel-heading">Set up mission control</h2>
           <div className="console-subhint">
-            Click dishes on the 3D Earth or toggle below
+            {isBeginner
+              ? 'Your spacecraft sends science home through radio dishes on Earth. More dishes and a faster radio mean more data gets home.'
+              : 'Click dishes on the 3D Earth or toggle below.'}
           </div>
+          {isBeginner && (
+            <button
+              type="button"
+              data-testid="kap-ground-btn"
+              className="secondary-hud-btn kap-build-btn full"
+              onClick={applyRecommendedGround}
+            >
+              Let Kap set it up
+            </button>
+          )}
 
-          <div className="console-section-label">GROUND STATIONS</div>
+          <div className="console-section-label">{isBeginner ? 'Radio dishes on Earth' : 'GROUND STATIONS'}</div>
           <div className="station-chip-grid">
             {GROUND_STATIONS.map((st) => {
               const active = ground.activeStationIds.includes(st.id);
@@ -547,14 +642,14 @@ export const PhaseHudOverlay: React.FC = () => {
                 >
                   <span>{st.name.replace(/\s*\(.*?\)/, '')}</span>
                   <span className="chip-cost">
-                    {st.costM > 0 ? `$${st.costM}M` : 'INCL'}
+                    {st.costM > 0 ? `$${st.costM}M` : isBeginner ? 'Free' : 'INCL'}
                   </span>
                 </button>
               );
             })}
           </div>
 
-          <div className="console-section-label">RADIO FREQUENCY BAND</div>
+          <div className="console-section-label">{isBeginner ? 'Radio speed' : 'RADIO FREQUENCY BAND'}</div>
           <div className="band-row">
             {bandIds.map((bId) => {
               const b = COMMS_BANDS[bId];
@@ -566,16 +661,18 @@ export const PhaseHudOverlay: React.FC = () => {
                   className={`band-chip ${ground.bandId === bId ? 'active' : ''}`}
                   onClick={() => setCommsBand(bId)}
                 >
-                  <div>{b.id.replace('_BAND', '-BAND')}</div>
+                  <div>{b.id.replace('_BAND', '-band')}</div>
                   <div className="chip-cost">
-                    {b.bandwidthMbps} Mbps · ${b.costM}M
+                    {isBeginner
+                      ? `${bId === 'S_BAND' ? 'Slow' : bId === 'X_BAND' ? 'Fast' : 'Fastest'} · $${b.costM}M`
+                      : `${b.bandwidthMbps} Mbps · $${b.costM}M`}
                   </div>
                 </button>
               );
             })}
           </div>
 
-          <div className="console-section-label">OPERATIONS LIFETIME</div>
+          <div className="console-section-label">{isBeginner ? 'How long the mission runs' : 'OPERATIONS LIFETIME'}</div>
           <div className="band-row">
             {lifetimes.map((yr) => (
               <button
@@ -592,11 +689,11 @@ export const PhaseHudOverlay: React.FC = () => {
 
           <div className="link-clearance-box">
             <div className="clearance-row">
-              <span>CONTACT COVERAGE</span>
+              <span>{isBeginner ? 'Time in radio contact' : 'CONTACT COVERAGE'}</span>
               <strong>{ge.contactCoveragePct}%</strong>
             </div>
             <div className="clearance-row">
-              <span>ORBIT DATA GEN / DOWNLINK</span>
+              <span>{isBeginner ? 'Science made vs. sent home, per orbit' : 'ORBIT DATA GEN / DOWNLINK'}</span>
               <strong>
                 {Math.round(ge.dataGeneratedPerOrbitMb)} /{' '}
                 {Math.round(ge.downlinkCapacityPerOrbitMb)} MB
@@ -624,7 +721,7 @@ export const PhaseHudOverlay: React.FC = () => {
               className="secondary-hud-btn"
               onClick={backToHangar}
             >
-              BACK TO VAB
+              Back
             </button>
             <button
               type="button"
@@ -633,7 +730,7 @@ export const PhaseHudOverlay: React.FC = () => {
               disabled={!ge.canGreenlight}
               onClick={greenlightLiftoff}
             >
-              GREENLIGHT LIFTOFF
+              {ge.canGreenlight ? 'Go for launch' : 'Fix what Kap flagged first'}
             </button>
           </div>
         </div>
@@ -650,11 +747,35 @@ export const PhaseHudOverlay: React.FC = () => {
     const activeFuelKg =
       flight.activeStageIndex === 0 ? flight.stage1PropKg : flight.stage2PropKg;
     const totalFuelKg = flight.stage1PropKg + flight.stage2PropKg;
-    const fuelPct = Math.round((totalFuelKg / Math.max(1, flight.stage1PropKg + flight.stage2PropKg)) * 100);
+    // Fuel left as a share of what the rocket launched with (was always 100%).
+    const lv = LAUNCH_VEHICLES.find((v) => v.id === spacecraft.launcherId);
+    const fullFuelKg = lv ? lv.stage1PropKg + lv.stage2PropKg : totalFuelKg;
+    const fuelPct = Math.round((totalFuelKg / Math.max(1, fullFuelKg)) * 100);
 
     // Thermal color coding
     const thermalColor = flight.thermalMarginC < 10 ? 'critical' : flight.thermalMarginC < 25 ? 'warn' : 'good';
     const batteryColor = battPct < 20 ? 'critical' : battPct < 40 ? 'warn' : 'good';
+
+    const goalPct = Math.min(100, (flight.deliveredDataMb / Math.max(1, mission.targetScienceMb)) * 100);
+    const goalLabel =
+      missionId === 'EARTH_OBSERVATION'
+        ? 'Climate photos sent home'
+        : missionId === 'SPACE_TELESCOPE'
+          ? 'Telescope images sent home'
+          : 'Science sent home';
+    const goalHint =
+      flight.status === 'PRELAUNCH'
+        ? 'Press Launch. Autopilot flies the rocket for you.'
+        : flight.status === 'ASCENT'
+          ? 'Climbing to orbit. Science starts once you get there.'
+          : flight.status === 'TRANSIT' || flight.status === 'TARGET_CAPTURE'
+            ? 'Cruising to the target. Speed up time with the warp buttons.'
+            : flight.status === 'LANDING'
+              ? 'Landing. Hold on.'
+              : flight.activeDsnStationIds.length > 0
+                ? 'Sending science home through a ground dish.'
+                : 'Collecting science. It sends when a ground dish comes into view.';
+    const L = (plain: string, expert: string) => (isBeginner ? plain : expert);
 
     return (
       <div className="hud-layer pointer-pass" data-testid="flight-hud">
@@ -690,7 +811,7 @@ export const PhaseHudOverlay: React.FC = () => {
         {/* Right Flight Status & Launch/Abort */}
         <div className="flight-right-controls">
           <div className="flight-phase-pill" data-testid="flight-status-pill">
-            PHASE: {flight.status}
+            {isBeginner ? FLIGHT_STATUS_PLAIN[flight.status] ?? flight.status : `PHASE: ${flight.status}`}
           </div>
           {flight.status === 'PRELAUNCH' ? (
             <button
@@ -699,7 +820,7 @@ export const PhaseHudOverlay: React.FC = () => {
               className="primary-cta-btn ignite"
               onClick={igniteLaunch}
             >
-              IGNITE LAUNCH
+              Launch
             </button>
           ) : (
             <button
@@ -715,6 +836,20 @@ export const PhaseHudOverlay: React.FC = () => {
 
         {/* Bottom Flight Instrument Strip */}
         <div className="flight-bottom-strip">
+        {/* Mission goal: the one number that decides the win */}
+        <div className="flight-goal" data-testid="flight-goal">
+          <div className="flight-goal-row">
+            <span className="flight-goal-label">{goalLabel}</span>
+            <span className="flight-goal-value tabular-nums">
+              {Math.round(flight.deliveredDataMb)} / {mission.targetScienceMb} MB
+            </span>
+          </div>
+          <div className="flight-goal-track">
+            <div className="flight-goal-fill" style={{ width: `${goalPct}%` }} />
+          </div>
+          {isBeginner && <div className="flight-goal-hint">{goalHint}</div>}
+        </div>
+
           <div className="flight-controls-row">
             <button
               type="button"
@@ -754,36 +889,39 @@ export const PhaseHudOverlay: React.FC = () => {
 
           <div className="instrument-row">
             <div className="inst-pill">
-              <span className="inst-k">ALT</span>
+              <span className="inst-k">{L('Altitude', 'ALT')}</span>
               <span className="inst-v" data-testid="inst-alt">
                 {fmtAlt(flight.orbitalElements.altitudeM)}
               </span>
             </div>
             <div className="inst-pill">
-              <span className="inst-k">SPD</span>
+              <span className="inst-k">{L('Speed', 'SPD')}</span>
               <span className="inst-v" data-testid="inst-spd">
                 {Math.round(flight.orbitalElements.speedMs)} m/s
               </span>
             </div>
-            <div className="inst-pill">
-              <span className="inst-k">AP</span>
+            <div className="inst-pill" title="Apoapsis: the highest point of your orbit">
+              <span className="inst-k">{L('Orbit high', 'AP')}</span>
               <span className="inst-v">{fmtAlt(flight.orbitalElements.apoapsisAltM)}</span>
             </div>
-            <div className="inst-pill">
-              <span className="inst-k">PE</span>
-              <span className="inst-v">{fmtAlt(flight.orbitalElements.periapsisAltM)}</span>
-            </div>
-            <div className="inst-pill">
-              <span className="inst-k">FUEL</span>
-              <span className="inst-v">{Math.round(activeFuelKg)} kg ({fuelPct}%)</span>
-            </div>
-            <div className={`inst-pill ${batteryColor}`}>
-              <span className="inst-k">BAT</span>
+            <div className="inst-pill" title="Periapsis: the lowest point of your orbit. Below 80 km the air drags you down.">
+              <span className="inst-k">{L('Orbit low', 'PE')}</span>
               <span className="inst-v">
-                {battPct}%{flight.inEclipse ? ' (ECLIPSE)' : ''}
-                {flight.currentPowerDrawW > 0 ? ` (${flight.currentPowerDrawW > flight.currentPowerGenW ? '-' : '+'}${Math.abs(flight.currentPowerGenW - flight.currentPowerDrawW)}W)` : ''}
+                {isBeginner && flight.orbitalElements.periapsisAltM < 0 ? 'Not yet' : fmtAlt(flight.orbitalElements.periapsisAltM)}
               </span>
             </div>
+            <div className="inst-pill">
+              <span className="inst-k">{L('Fuel', 'FUEL')}</span>
+              <span className="inst-v">{isBeginner ? `${fuelPct}%` : `${Math.round(activeFuelKg)} kg stage · ${fuelPct}% total`}</span>
+            </div>
+            <div className={`inst-pill ${batteryColor}`}>
+              <span className="inst-k">{L('Battery', 'BAT')}</span>
+              <span className="inst-v">
+                {battPct}%{flight.inEclipse ? L(' (in shadow)', ' (ECLIPSE)') : ''}
+                {!isBeginner && flight.currentPowerDrawW > 0 ? ` (${flight.currentPowerDrawW > flight.currentPowerGenW ? '-' : '+'}${Math.round(Math.abs(flight.currentPowerGenW - flight.currentPowerDrawW))}W)` : ''}
+              </span>
+            </div>
+            {!isBeginner && <>
             <div className={`inst-pill ${thermalColor}`}>
               <span className="inst-k">THERM</span>
               <span className="inst-v">
@@ -796,12 +934,15 @@ export const PhaseHudOverlay: React.FC = () => {
                 {flight.propellantBoilOffKg.toFixed(2)} kg
               </span>
             </div>
+            </>}
+            {!isBeginner && (
             <div className="inst-pill">
               <span className="inst-k">SCIENCE</span>
               <span className="inst-v" data-testid="inst-science">
                 {flight.deliveredDataMb.toFixed(0)}/{mission.targetScienceMb} MB
               </span>
             </div>
+            )}
           </div>
         </div>
       </div>
@@ -825,7 +966,13 @@ export const PhaseHudOverlay: React.FC = () => {
                 ? 'MISSION ACCOMPLISHED'
                 : 'MISSION FAILED'}
             </span>
-            <h2 className="debrief-title">{debrief.headline}</h2>
+            <h2 className="debrief-title">
+              {isBeginner
+                ? debrief.outcome === 'SUCCESS'
+                  ? `${MISSION_PLAIN[missionId].name}: you did it!`
+                  : `${MISSION_PLAIN[missionId].name}: not this time`
+                : debrief.headline}
+            </h2>
           </div>
 
           <div className="debrief-resource-grid">
@@ -838,18 +985,33 @@ export const PhaseHudOverlay: React.FC = () => {
                   data-testid={`debrief-res-${rk}`}
                 >
                   <div className="debrief-cell-top">
-                    <span className="debrief-cell-name">{RESOURCE_LABELS[rk]}</span>
-                    <span className="debrief-cell-status">{item.status}</span>
+                    <span className="debrief-cell-name">{isBeginner ? PLAIN_RESOURCE[rk] : RESOURCE_LABELS[rk]}</span>
+                    <span className="debrief-cell-status">{isBeginner ? PLAIN_STATUS[item.status] : item.status}</span>
                   </div>
-                  <div className="debrief-line right">
-                    <strong>RIGHT:</strong> {item.whatWentRight}
-                  </div>
-                  <div className="debrief-line wrong">
-                    <strong>ISSUE:</strong> {item.whatWentWrong}
-                  </div>
-                  <div className="debrief-line note">
-                    {isBeginner ? item.beginnerNote : item.realisticMetrics}
-                  </div>
+                  {isBeginner ? (
+                    <>
+                      <div className="debrief-line note plain">{item.beginnerNote}</div>
+                      <details className="debrief-more">
+                        <summary>Details</summary>
+                        <div className="debrief-line right">
+                          <strong>RIGHT:</strong> {item.whatWentRight}
+                        </div>
+                        <div className="debrief-line wrong">
+                          <strong>ISSUE:</strong> {item.whatWentWrong}
+                        </div>
+                      </details>
+                    </>
+                  ) : (
+                    <>
+                      <div className="debrief-line right">
+                        <strong>RIGHT:</strong> {item.whatWentRight}
+                      </div>
+                      <div className="debrief-line wrong">
+                        <strong>ISSUE:</strong> {item.whatWentWrong}
+                      </div>
+                      <div className="debrief-line note">{item.realisticMetrics}</div>
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -862,7 +1024,7 @@ export const PhaseHudOverlay: React.FC = () => {
               className="primary-cta-btn"
               onClick={returnToHangarKeepDesign}
             >
-              RETURN TO HANGAR (KEEP DESIGN)
+              {debrief.outcome === 'SUCCESS' ? 'Try another design' : 'Fix my design'}
             </button>
             <button
               type="button"
@@ -870,7 +1032,7 @@ export const PhaseHudOverlay: React.FC = () => {
               className="secondary-hud-btn"
               onClick={restartCampaign}
             >
-              NEW MISSION
+              New mission
             </button>
           </div>
         </div>
