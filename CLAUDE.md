@@ -122,7 +122,7 @@ EARTH_MU = 3.84e12                 // Scaled μ
 EARTH_ATM_TOP_M = 80_000           // 80 km atmosphere
 MOON_ORBIT_M = 3_200_000           // 3,200 km
 MARS_TRANSFER_M = 6_500_000        // 6,500 km
-EARTH_ROT_RATE = 2π / 1800         // 30-min scaled Earth day
+EARTH_ROT_RATE = 2π / 14400        // 4-hour scaled Earth day (about 7 low orbits per day)
 WORLD_SCALE = 1 / 10_000           // Three.js units (1 unit = 10 km)
 ```
 

@@ -17,6 +17,7 @@ import type {
 } from '../core/types';
 import { useMissionStore } from '../store/useMissionStore';
 import { MISSION_ORDER, MISSION_PLAIN } from './plainText';
+import { PART_PLAIN, usePartFocus } from './partPlain';
 
 function formatDeltaHtml(deltas: HoverDelta): React.ReactNode {
   const badges: React.ReactElement[] = [];
@@ -74,6 +75,29 @@ const RESOURCE_LABELS: Record<ResourceKey, string> = {
   time: 'SCHEDULE',
 };
 
+/** Eases a jumpy value toward its target so gauges glide instead of snapping. */
+function useEasedValue(target: number): number {
+  const [shown, setShown] = useState(target);
+  const targetRef = React.useRef(target);
+  targetRef.current = target;
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      setShown((v) => {
+        const next = v + (targetRef.current - v) * Math.min(1, dt * 2.2);
+        return Math.abs(next - v) < 0.0005 ? v : next;
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return shown;
+}
+
 function fmtAlt(altM: number): string {
   if (!Number.isFinite(altM)) return 'ESC';
   if (Math.abs(altM) >= 1000) return `${(altM / 1000).toFixed(1)} km`;
@@ -125,6 +149,8 @@ export const PhaseHudOverlay: React.FC = () => {
   const restartCampaign = useMissionStore((s) => s.restartCampaign);
 
   const [hoveredPartId, setHoveredPartId] = useState<string | null>(null);
+  const setFocusPart = usePartFocus((s) => s.setPart);
+  const shownThrottle = useEasedValue(flight && flight.status !== 'SUCCESS' && flight.status !== 'FAILED' ? flight.throttle : 0);
   const setHoveredCandidate = useMissionStore((s) => s.setHoveredCandidate);
 
   const mission = MISSIONS[missionId];
@@ -196,6 +222,9 @@ export const PhaseHudOverlay: React.FC = () => {
             >
               Team mode for up to 4 players · coming soon
             </button>
+            <p className="title-credit">
+              Planet maps by <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noreferrer">Solar System Scope</a>, CC BY 4.0
+            </p>
           </div>
         </div>
       </div>
@@ -380,7 +409,7 @@ export const PhaseHudOverlay: React.FC = () => {
             costM: lv.costM,
             leadMonths: lv.leadMonths,
             desc: isBeginner ? lv.beginnerDesc : lv.realisticDesc,
-            meta: `${lv.stage1ThrustN / 1000} kN · $${lv.costM}M`,
+            meta: isBeginner ? `$${lv.costM}M` : `${lv.stage1ThrustN / 1000} kN · $${lv.costM}M`,
           }))
         : SPACECRAFT_PARTS.filter((p) => p.category === activeCat).map((p) => ({
             id: p.id,
@@ -465,7 +494,7 @@ export const PhaseHudOverlay: React.FC = () => {
             </button>
           </div>
 
-          {inspectedOpt && (
+          {inspectedOpt && !isBeginner && (
             <div className="part-inspector-bar">
               <strong>{inspectedOpt.name}:</strong> {inspectedOpt.desc}
               {!isBeginner && previewCandidate && previewCandidate.deltas && (
@@ -501,7 +530,10 @@ export const PhaseHudOverlay: React.FC = () => {
                   draggable
                   data-testid={`part-chip-${opt.id}`}
                   className={`part-tier-chip ${isSelected ? 'selected' : ''} ${isHovered ? 'hovered' : ''}`}
-                  onMouseEnter={() => setHoveredPartId(opt.id)}
+                  onMouseEnter={() => {
+                    setHoveredPartId(opt.id);
+                    setFocusPart(opt.id);
+                  }}
                   onMouseLeave={() => setHoveredPartId(null)}
                   onDragStart={(e) => {
                     e.dataTransfer.setData(
@@ -509,9 +541,18 @@ export const PhaseHudOverlay: React.FC = () => {
                       JSON.stringify({ category: activeCat, partId: opt.id })
                     );
                   }}
-                  onClick={() => equipPart(activeCat, opt.id)}
+                  onClick={() => {
+                    equipPart(activeCat, opt.id);
+                    setFocusPart(opt.id);
+                  }}
                 >
-                  <div className="part-chip-name">{opt.name}</div>
+                  <div className="part-chip-name">{isBeginner ? PART_PLAIN[opt.id]?.name ?? opt.name : opt.name}</div>
+                  {isBeginner && PART_PLAIN[opt.id] && (
+                    <div className="part-tradeoff">
+                      <span className="part-good">+ {PART_PLAIN[opt.id].good}</span>
+                      <span className="part-bad">- {PART_PLAIN[opt.id].bad}</span>
+                    </div>
+                  )}
                   <div className="part-chip-meta">{opt.meta}</div>
                   {isHovered && inlineDeltas.length > 0 && (
                     <div className="inline-delta-badges">
@@ -750,6 +791,8 @@ export const PhaseHudOverlay: React.FC = () => {
     // Fuel left as a share of what the rocket launched with (was always 100%).
     const lv = LAUNCH_VEHICLES.find((v) => v.id === spacecraft.launcherId);
     const fullFuelKg = lv ? lv.stage1PropKg + lv.stage2PropKg : totalFuelKg;
+    const stage1FullKg = lv?.stage1PropKg ?? flight.stage1PropKg;
+    const stage2FullKg = lv?.stage2PropKg ?? flight.stage2PropKg;
     const fuelPct = Math.round((totalFuelKg / Math.max(1, fullFuelKg)) * 100);
 
     // Thermal color coding
@@ -779,33 +822,80 @@ export const PhaseHudOverlay: React.FC = () => {
 
     return (
       <div className="hud-layer pointer-pass" data-testid="flight-hud">
-        {/* Left Vertical Throttle & Stage Control */}
-        <div className="flight-left-throttle">
-          <div className="stage-badge" data-testid="flight-stage-badge">
-            STAGE {flight.activeStageIndex + 1}
+        {/* Rocket stages: what each stage does, its fuel, and what it is doing now */}
+        <div className="stage-panel" data-testid="stage-panel">
+          <div className="stage-panel-title">Rocket stages</div>
+          {[0, 1].map((i) => {
+            const full = i === 0 ? stage1FullKg : stage2FullKg;
+            const left = i === 0 ? flight.stage1PropKg : flight.stage2PropKg;
+            const pct = Math.max(0, Math.min(100, (left / Math.max(1, full)) * 100));
+            const state =
+              i < flight.activeStageIndex
+                ? 'dropped'
+                : i === flight.activeStageIndex
+                  ? flight.status === 'PRELAUNCH'
+                    ? 'ready'
+                    : flight.throttle > 0.01 && left > 0
+                      ? 'burning'
+                      : 'coasting'
+                  : 'waiting';
+            const label = { dropped: 'Dropped', ready: 'Ready', burning: 'Burning', coasting: 'Engine off', waiting: 'Waiting' }[state];
+            return (
+              <div
+                key={i}
+                className={`stage-card ${state}`}
+                data-testid={i === flight.activeStageIndex ? 'flight-stage-badge' : undefined}
+              >
+                <div className="stage-card-top">
+                  <span className="stage-card-name">{i === 0 ? 'Stage 1: Booster' : 'Stage 2: Upper stage'}</span>
+                  <span className="stage-card-state">{label}</span>
+                </div>
+                {isBeginner && (
+                  <div className="stage-card-role">
+                    {i === 0 ? 'Lifts you off the ground, then falls away.' : 'Pushes you the rest of the way into orbit.'}
+                  </div>
+                )}
+                <div className="stage-fuel-track" aria-label={`Stage ${i + 1} fuel ${Math.round(pct)}%`}>
+                  <div className="stage-fuel-fill" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+
+          <div className="engine-meter">
+            <div className="engine-meter-row">
+              <span>Engine power</span>
+              <span className="tabular-nums">{Math.round(shownThrottle * 100)}%</span>
+            </div>
+            {isBeginner || flightControls.autoGuidance ? (
+              <div className="stage-fuel-track engine">
+                <div className="stage-fuel-fill engine-fill" style={{ width: `${Math.round(shownThrottle * 100)}%` }} />
+              </div>
+            ) : (
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(flightControls.throttle * 100)}
+                onChange={(e) => setThrottle(Number(e.target.value) / 100)}
+                aria-label="Throttle"
+                className="throttle-slider horizontal"
+                data-testid="throttle-slider"
+              />
+            )}
           </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={Math.round(flightControls.throttle * 100)}
-            onChange={(e) => setThrottle(Number(e.target.value) / 100)}
-            aria-label="Throttle"
-            className="throttle-slider"
-            data-testid="throttle-slider"
-          />
-          <div className="throttle-pct">
-            {Math.round(flightControls.throttle * 100)}%
-          </div>
-          <button
-            type="button"
-            data-testid="stage-btn"
-            className="stage-trigger-btn"
-            disabled={flight.activeStageIndex === 1}
-            onClick={requestStage}
-          >
-            STAGE
-          </button>
+
+          {!isBeginner && (
+            <button
+              type="button"
+              data-testid="stage-btn"
+              className="stage-trigger-btn"
+              disabled={flight.activeStageIndex === 1 || flight.status === 'PRELAUNCH'}
+              onClick={requestStage}
+            >
+              Drop stage 1 now
+            </button>
+          )}
         </div>
 
         {/* Right Flight Status & Launch/Abort */}
@@ -851,25 +941,28 @@ export const PhaseHudOverlay: React.FC = () => {
         </div>
 
           <div className="flight-controls-row">
-            <button
-              type="button"
-              data-testid="toggle-autopilot-btn"
-              className={`mini-toggle-btn ${flightControls.autoGuidance ? 'active' : ''}`}
-              onClick={toggleFlightAssist}
-            >
-              {flightControls.autoGuidance ? 'AUTO PILOT: ON' : 'MANUAL STEER'}
-            </button>
-            {!flightControls.autoGuidance && difficulty === 'REALISTIC' && (
-              <div className="manual-steer-hint">MANUAL VECTOR: W/S pitch · A/D yaw · 1× recommended</div>
+            {!isBeginner && (
+              <>
+                <button
+                  type="button"
+                  data-testid="toggle-autopilot-btn"
+                  className={`mini-toggle-btn ${flightControls.autoGuidance ? 'active' : ''}`}
+                  onClick={toggleFlightAssist}
+                  title="Autopilot flies the best path to orbit. Turn it off to steer yourself."
+                >
+                  {flightControls.autoGuidance ? 'Autopilot: on' : 'Autopilot: off'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="toggle-autostage-btn"
+                  className={`mini-toggle-btn ${flightControls.autoStage ? 'active' : ''}`}
+                  onClick={toggleAutoStage}
+                  title="Drops the empty booster for you. If off, press Space when Stage 1 runs dry, or you coast with no engine."
+                >
+                  {flightControls.autoStage ? 'Auto-drop stage: on' : 'Auto-drop stage: off'}
+                </button>
+              </>
             )}
-            <button
-              type="button"
-              data-testid="toggle-autostage-btn"
-              className={`mini-toggle-btn ${flightControls.autoStage ? 'active' : ''}`}
-              onClick={toggleAutoStage}
-            >
-              AUTO-STAGE: {flightControls.autoStage ? 'ON' : 'OFF'}
-            </button>
 
             <div className="warp-group">
               <span className="warp-label">WARP</span>
@@ -887,6 +980,18 @@ export const PhaseHudOverlay: React.FC = () => {
             </div>
           </div>
 
+          {!isBeginner && !flightControls.autoGuidance && (
+            <div className="manual-steer-hint" data-testid="manual-controls-help">
+              You are flying. <kbd>W</kbd>/<kbd>S</kbd> tilt the nose up or down, <kbd>A</kbd>/<kbd>D</kbd> turn left or right,{' '}
+              <kbd>Z</kbd>/<kbd>X</kbd> more or less engine power, <kbd>Space</kbd> drops stage 1. Tilt slowly toward the
+              horizon after you clear the air: going straight up never reaches orbit.
+            </div>
+          )}
+          {!isBeginner && !flightControls.autoStage && flight.activeStageIndex === 0 && (
+            <div className="manual-steer-hint warn">
+              Auto-drop is off: press <kbd>Space</kbd> when Stage 1 is empty, or the rocket coasts and falls back.
+            </div>
+          )}
           <div className="instrument-row">
             <div className="inst-pill">
               <span className="inst-k">{L('Altitude', 'ALT')}</span>

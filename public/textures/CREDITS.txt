@@ -1,0 +1,3 @@
+Planet surface maps (2k_*/8k_* earth_daymap, moon, mars)
+by Solar System Scope, https://www.solarsystemscope.com/textures/
+License: CC BY 4.0, https://creativecommons.org/licenses/by/4.0/

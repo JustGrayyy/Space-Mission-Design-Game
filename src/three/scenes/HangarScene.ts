@@ -14,6 +14,13 @@ export class HangarScene implements SceneController {
   private camera!: THREE.PerspectiveCamera;
   private root = new THREE.Group();
   private stackContainer = new THREE.Group();
+  /** Orange ring that bursts outward when a part snaps on. */
+  private snapRing = new THREE.Mesh(
+    new THREE.TorusGeometry(1, 0.035, 8, 64),
+    new THREE.MeshBasicMaterial({ color: '#ff7a1a', transparent: true, opacity: 0, depthWrite: false })
+  );
+  private snapT = -1;
+  private lastCraftSig = '';
   private rocketGroup: THREE.Group | null = null;
 
   private yaw = 0.65;
@@ -50,11 +57,11 @@ export class HangarScene implements SceneController {
     keyLight.shadow.bias = -0.0005;
 
     // Fill light - cool cyan from opposite side
-    const fillLight = new THREE.DirectionalLight('#38bdf8', 1.0);
+    const fillLight = new THREE.DirectionalLight('#9cc8ff', 0.8);
     fillLight.position.set(-12, 10, -8);
 
     // Rim/back light - subtle warm rim for silhouette
-    const rimLight = new THREE.DirectionalLight('#fef08a', 0.6);
+    const rimLight = new THREE.DirectionalLight('#ff9a4d', 1.6);
     rimLight.position.set(-5, -5, -15);
 
     // Floor bounce - warm ambient from pad
@@ -113,6 +120,10 @@ export class HangarScene implements SceneController {
     if (!isInitial) {
       this.bounceAmount = 1.0;
     }
+    // Only a real part change (not just switching tabs) fires the snap burst.
+    const craftSig = JSON.stringify(state.spacecraft);
+    if (this.lastCraftSig && craftSig !== this.lastCraftSig) this.snapT = 0;
+    this.lastCraftSig = craftSig;
   }
 
   private updateCamera(): void {
@@ -126,6 +137,20 @@ export class HangarScene implements SceneController {
 
   update(dt: number, elapsed: number): void {
     this.rebuildRocketIfNeeded();
+
+    if (!this.snapRing.parent) {
+      this.snapRing.rotation.x = Math.PI / 2;
+      this.stackContainer.parent?.add(this.snapRing);
+    }
+    if (this.snapT >= 0) {
+      this.snapT += dt;
+      const k = Math.min(1, this.snapT / 0.7);
+      const ease = 1 - Math.pow(1 - k, 3);
+      this.snapRing.position.set(0, this.lookAtY, 0);
+      this.snapRing.scale.setScalar(0.6 + ease * 4.2);
+      (this.snapRing.material as THREE.MeshBasicMaterial).opacity = 0.85 * (1 - k);
+      if (k >= 1) this.snapT = -1;
+    }
 
     if (this.bounceAmount > 0) {
       this.bounceAmount = Math.max(0, this.bounceAmount - dt * 3.8);

@@ -313,6 +313,29 @@ function makePlanetCanvasTexture(kind: 'EARTH' | 'MOON' | 'MARS'): THREE.CanvasT
   return tex;
 }
 
+const PLANET_MAP_FILE: Record<'EARTH' | 'MOON' | 'MARS', string> = {
+  EARTH: '8k_earth_daymap.jpg', // 8K: stays sharp on the low launch camera
+  MOON: '8k_moon.jpg',
+  MARS: '8k_mars.jpg',
+};
+const planetMapCache = new Map<string, Promise<THREE.Texture>>();
+
+/** Loads a real surface map once and shares it between every scene that draws the planet. */
+function loadPlanetMap(kind: 'EARTH' | 'MOON' | 'MARS'): Promise<THREE.Texture> {
+  let p = planetMapCache.get(kind);
+  if (!p) {
+    p = new THREE.TextureLoader()
+      .loadAsync(`textures/${PLANET_MAP_FILE[kind]}`)
+      .then((tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = 16;
+        return tex;
+      });
+    planetMapCache.set(kind, p);
+  }
+  return p;
+}
+
 export function createPlanetMesh(
   kind: 'EARTH' | 'MOON' | 'MARS',
   radiusUnits: number
@@ -321,7 +344,9 @@ export function createPlanetMesh(
   group.name = `planet-${kind.toLowerCase()}`;
 
   const tex = makePlanetCanvasTexture(kind);
-  const segs = 48;
+  // 256 segments: with 48 the flat faces sagged ~1.3 km (game scale) below the true
+  // radius, so the launch pad visibly floated above the ground.
+  const segs = 256;
   const geom = new THREE.SphereGeometry(radiusUnits, segs, segs);
 
   // PBR materials for planets
@@ -349,15 +374,25 @@ export function createPlanetMesh(
 
   const body = new THREE.Mesh(geom, bodyMat);
   body.name = `${kind.toLowerCase()}-surface`;
+  // three.js wraps a map with east running toward -Z, but the game's longitudes run
+  // toward +Z (getSurfacePosition). Mirroring Z lines the real map up with launch
+  // sites and radio dishes, so Kennedy sits on Florida.
+  body.scale.z = -1;
   group.add(body);
+
+  // Real planet maps (Solar System Scope, CC BY 4.0). The drawn texture shows until it loads.
+  loadPlanetMap(kind).then((real) => {
+    bodyMat.map = real;
+    bodyMat.needsUpdate = true;
+  });
 
   if (kind === 'EARTH' || kind === 'MARS') {
     // Enhanced Atmospheric Fresnel Rim Glow - uses BackSide for proper limb glow
-    const rimGeom = new THREE.SphereGeometry(radiusUnits * 1.035, segs, segs);
+    const rimGeom = new THREE.SphereGeometry(radiusUnits * 1.06, 96, 96);
 
     const rimMat = new THREE.ShaderMaterial({
       uniforms: {
-        uInnerColor: { value: new THREE.Color(kind === 'EARTH' ? '#3ca8ff' : '#ff8c5a') },
+        uInnerColor: { value: new THREE.Color(kind === 'EARTH' ? '#bfe3ff' : '#ffc9a3') },
         uOuterColor: { value: new THREE.Color(kind === 'EARTH' ? '#0ea5e9' : '#fb923c') },
         uFresnelPower: { value: 3.2 },
         uFresnelScale: { value: 1.0 },
@@ -384,19 +419,13 @@ export function createPlanetMesh(
         varying vec3 vWorldPos;
 
         void main() {
-          vec3 viewDir = normalize(uCameraPos - vWorldPos);
-          float NdotV = max(dot(vNormal, viewDir), 0.0);
-          float fresnel = pow(1.0 - NdotV, uFresnelPower) * uFresnelScale;
-
-          // Add subtle atmospheric shimmer
-          float shimmer = sin(vWorldPos.y * 2.0 + uTime * 0.8) * 0.02 + 0.98;
-
-          // Color gradient from inner to outer atmosphere
-          float gradient = smoothstep(0.15, 0.85, fresnel);
-          vec3 color = mix(uInnerColor, uOuterColor, gradient);
-
-          float alpha = fresnel * shimmer * 0.85;
-          gl_FragColor = vec4(color, alpha);
+          // Soft atmospheric halo: brightest right at the planet's edge, fading smoothly
+          // into space (a classic back-face glow), instead of a hard blue ring.
+          float rim = max(0.0, 0.72 + dot(normalize(vNormal), vec3(0.0, 0.0, 1.0)));
+          float glow = pow(rim, 5.0) * uFresnelScale;
+          vec3 color = mix(uOuterColor, uInnerColor, clamp(glow * 1.4, 0.0, 1.0));
+          float alpha = clamp(glow, 0.0, 1.0) * 0.9;
+          gl_FragColor = vec4(color * glow, alpha);
         }
       `,
       transparent: true,
@@ -551,6 +580,205 @@ function getCategorySlotY(cat: SubsystemCategory): number {
   }
 }
 
+// --- Launcher geometry helpers (shared by the stack and the spent booster) ---
+
+interface LauncherMats {
+  paint: THREE.Material;
+  carbon: THREE.Material;
+  engine: THREE.Material;
+  orange: THREE.Material;
+  tier: THREE.Material;
+}
+
+function makeLauncherPaintMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: '#f4efe4', roughness: 0.45, metalness: 0.1 });
+}
+
+function makeLauncherCarbonMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: '#23252b', roughness: 0.6, metalness: 0.2 });
+}
+
+function makeLauncherEngineMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: '#3a3d45',
+    roughness: 0.35,
+    metalness: 0.8,
+    side: THREE.DoubleSide,
+  });
+}
+
+function makeLauncherOrangeMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: '#ff7a1a', roughness: 0.5, metalness: 0.1 });
+}
+
+function launcherTierColor(launcherId: string | null): string {
+  return launcherId === 'launcher-super-heavy'
+    ? '#ef4444'
+    : launcherId === 'launcher-heavy'
+      ? '#f97316'
+      : launcherId === 'launcher-medium-heavy'
+        ? '#f59e0b'
+        : launcherId === 'launcher-medium'
+          ? '#0ea5e9'
+          : '#22c55e';
+}
+
+/** Flared engine bell. Throat at local y=0, exit at y=-length. */
+function makeBellGeometry(exitR: number, length: number): THREE.LatheGeometry {
+  const throatR = exitR * 0.42;
+  const pts: THREE.Vector2[] = [];
+  const steps = 14;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const r = throatR + (exitR - throatR) * (1 - Math.pow(1 - t, 1.8));
+    pts.push(new THREE.Vector2(r, -length * t));
+  }
+  return new THREE.LatheGeometry(pts, 32);
+}
+
+/** Rounded ogive nose. Base at local y=0, tip at y=h. */
+function makeOgiveGeometry(baseR: number, h: number): THREE.LatheGeometry {
+  const pts: THREE.Vector2[] = [];
+  const steps = 16;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const r = baseR * Math.pow(Math.cos((t * Math.PI) / 2), 0.75);
+    pts.push(new THREE.Vector2(Math.max(r, 0.0001), h * t));
+  }
+  return new THREE.LatheGeometry(pts, 32);
+}
+
+function addEngineCluster(
+  group: THREE.Group,
+  mats: LauncherMats,
+  coreR: number,
+  cluster: boolean,
+  topY: number,
+  x = 0,
+  z = 0
+): void {
+  const placeBell = (bx: number, bz: number, exitR: number, len: number) => {
+    const bell = new THREE.Mesh(makeBellGeometry(exitR, len), mats.engine);
+    bell.position.set(bx, topY, bz);
+    group.add(bell);
+    const chamber = new THREE.Mesh(
+      new THREE.CylinderGeometry(exitR * 0.5, exitR * 0.42, 0.1, 20),
+      mats.engine
+    );
+    chamber.position.set(bx, topY + 0.05, bz);
+    group.add(chamber);
+  };
+  if (cluster) {
+    placeBell(x, z, coreR * 0.24, 0.32);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      placeBell(x + Math.cos(a) * coreR * 0.58, z + Math.sin(a) * coreR * 0.58, coreR * 0.2, 0.3);
+    }
+  } else {
+    placeBell(x, z, coreR * 0.62, 0.36);
+  }
+}
+
+/**
+ * Stage 1 (core + strap-ons + interstage), in stack coordinates
+ * (base of the stack at y=0), shifted by yOffset.
+ */
+function addStage1Geometry(
+  group: THREE.Group,
+  launcherId: string,
+  scaleW: number,
+  mats: LauncherMats,
+  yOffset: number
+): void {
+  const R = 0.55 * scaleW;
+  const seg = 32;
+  const y = (v: number) => v + yOffset;
+
+  // Thrust skirt (carbon), 0.12..0.32
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 1.04, 0.2, seg), mats.carbon);
+  skirt.position.y = y(0.22);
+  group.add(skirt);
+
+  // Main tank, 0.32..3.8
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 3.48, seg), mats.paint);
+  tank.position.y = y(2.06);
+  group.add(tank);
+
+  // Orange accent stripe + thin tier band
+  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.006, R * 1.006, 0.12, seg), mats.orange);
+  stripe.position.y = y(3.2);
+  group.add(stripe);
+  const tierBand = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.006, R * 1.006, 0.035, seg), mats.tier);
+  tierBand.position.y = y(3.32);
+  group.add(tierBand);
+  const lowStripe = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.006, R * 1.006, 0.05, seg), mats.orange);
+  lowStripe.position.y = y(0.55);
+  group.add(lowStripe);
+
+  // Interstage (carbon), 3.8..4.22
+  const interstage = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.004, R * 1.004, 0.42, seg), mats.carbon);
+  interstage.position.y = y(4.01);
+  group.add(interstage);
+
+  // Grid fins (deployed, on the interstage)
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.26 * scaleW, 0.03, 0.22 * scaleW), mats.carbon);
+    const rr = R + 0.13 * scaleW;
+    fin.position.set(Math.cos(a) * rr, y(4.08), Math.sin(a) * rr);
+    fin.rotation.y = -a;
+    group.add(fin);
+  }
+
+  // Folded landing-leg stubs
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.95, 0.14 * scaleW), mats.carbon);
+    const rr = R + 0.02;
+    leg.position.set(Math.cos(a) * rr, y(0.82), Math.sin(a) * rr);
+    leg.rotation.y = -a;
+    group.add(leg);
+  }
+
+  // Strap-on boosters
+  const strapOns: { xs: number[]; r: number; h: number; cy: number }[] = [];
+  if (launcherId === 'launcher-heavy' || launcherId === 'launcher-super-heavy') {
+    const isSH = launcherId === 'launcher-super-heavy';
+    const spread = 0.98 * (isSH ? 1.3 : 1);
+    strapOns.push({
+      xs: (isSH ? [-1.5, -0.5, 0.5, 1.5] : [-1, 1]).map((s) => s * spread),
+      r: isSH ? 0.4 : 0.32,
+      h: 3.1,
+      cy: 1.75,
+    });
+  } else if (launcherId === 'launcher-medium-heavy') {
+    strapOns.push({ xs: [-0.88, 0.88], r: 0.25, h: 2.8, cy: 1.6 });
+  }
+  for (const so of strapOns) {
+    for (const bx of so.xs) {
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(so.r, so.r, so.h, seg), mats.paint);
+      body.position.set(bx, y(so.cy), 0);
+      group.add(body);
+      const topY = so.cy + so.h / 2;
+      const nose = new THREE.Mesh(makeOgiveGeometry(so.r, so.r * 2.2), mats.paint);
+      nose.position.set(bx, y(topY), 0);
+      group.add(nose);
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(so.r * 1.01, so.r * 1.01, 0.08, seg), mats.orange);
+      band.position.set(bx, y(topY - 0.12), 0);
+      group.add(band);
+      const baseY = so.cy - so.h / 2;
+      const bSkirt = new THREE.Mesh(new THREE.CylinderGeometry(so.r, so.r * 1.05, 0.12, seg), mats.carbon);
+      bSkirt.position.set(bx, y(baseY + 0.06), 0);
+      group.add(bSkirt);
+      const bBell = new THREE.Mesh(makeBellGeometry(so.r * 0.7, 0.3), mats.engine);
+      bBell.position.set(bx, y(baseY), 0);
+      group.add(bBell);
+    }
+  }
+
+  // Main engines, throat just under the skirt
+  addEngineCluster(group, mats, R, scaleW >= 1.2, y(0.13));
+}
 export function createSpentStage1Mesh(launcherId: string | null): THREE.Group {
   const group = new THREE.Group();
   const scaleW =
@@ -562,32 +790,17 @@ export function createSpentStage1Mesh(launcherId: string | null): THREE.Group {
           ? 1.2
           : launcherId === 'launcher-medium'
             ? 1.05
-            : 0.78;
+            : 0.8;
 
-  const bodyMat = new THREE.MeshStandardMaterial({
-    color: '#d8dee9',
-    roughness: 0.4,
-    metalness: 0.35,
-  });
-  const darkMat = new THREE.MeshStandardMaterial({
-    color: '#1e293b',
-    roughness: 0.5,
-    metalness: 0.6,
-  });
-
-  const core = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.55 * scaleW, 0.58 * scaleW, 3.6, 20),
-    bodyMat
-  );
-  core.position.y = 0;
-  group.add(core);
-
-  const nozzle = new THREE.Mesh(
-    new THREE.ConeGeometry(0.32 * scaleW, 0.55, 16),
-    darkMat
-  );
-  nozzle.position.y = -2.0;
-  group.add(nozzle);
+  const mats: LauncherMats = {
+    paint: makeLauncherPaintMaterial(),
+    carbon: makeLauncherCarbonMaterial(),
+    engine: makeLauncherEngineMaterial(),
+    orange: makeLauncherOrangeMaterial(),
+    tier: new THREE.MeshStandardMaterial({ color: launcherTierColor(launcherId), roughness: 0.5, metalness: 0.1 }),
+  };
+  // Same geometry as the stack's stage 1, centred on the origin (stack y=2.0 -> 0).
+  addStage1Geometry(group, launcherId ?? '', scaleW, mats, -2.0);
 
   return group;
 }
@@ -640,110 +853,44 @@ export function createRocketStackGroup(
     lvGroup.name = 'slot-launcher';
     lvGroup.userData.category = 'launcher';
 
-    const hullMat = conflictMat('#e2e8f0', 'launcher');
-    const accentMat = new THREE.MeshStandardMaterial({
-      color:
-        launcherId === 'launcher-super-heavy'
-          ? '#ef4444'
-          : launcherId === 'launcher-heavy'
-            ? '#f97316'
-            : launcherId === 'launcher-medium-heavy'
-              ? '#f59e0b'
-              : launcherId === 'launcher-medium'
-                ? '#0ea5e9'
-                : '#22c55e',
-      roughness: 0.4,
-      metalness: 0.3,
-    });
-    const engineMat = new THREE.MeshStandardMaterial({
-      color: '#1e293b',
-      roughness: 0.5,
-      metalness: 0.7,
-    });
+    const hullMat = conflictMat('#f4efe4', 'launcher');
+    hullMat.roughness = 0.45;
+    hullMat.metalness = 0.1;
+    const mats: LauncherMats = {
+      paint: hullMat,
+      carbon: makeLauncherCarbonMaterial(),
+      engine: makeLauncherEngineMaterial(),
+      orange: makeLauncherOrangeMaterial(),
+      tier: new THREE.MeshStandardMaterial({ color: launcherTierColor(launcherId), roughness: 0.5, metalness: 0.1 }),
+    };
 
     if (!hideStage1) {
-      // Stage 1 Core
-      const s1 = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.55 * lvScaleW, 0.6 * lvScaleW, 3.6, 24),
-        hullMat
-      );
-      s1.position.y = 2.0;
-      lvGroup.add(s1);
-
-      // Stripe
-      const stripe = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.56 * lvScaleW, 0.56 * lvScaleW, 0.35, 24),
-        accentMat
-      );
-      stripe.position.y = 3.2;
-      lvGroup.add(stripe);
-
-      // Side boosters for Heavy and Super-Heavy
-      if (launcherId === 'launcher-heavy' || launcherId === 'launcher-super-heavy') {
-        const boosterPositions = launcherId === 'launcher-super-heavy'
-          ? [-1.5, -0.5, 0.5, 1.5]
-          : [-1, 1];
-
-        for (const side of boosterPositions) {
-          const boosterScale = launcherId === 'launcher-super-heavy' ? 0.4 : 0.32;
-          const booster = new THREE.Mesh(
-            new THREE.CylinderGeometry(boosterScale, boosterScale * 1.06, 3.1, 16),
-            hullMat
-          );
-          booster.position.set(side * (0.98 * (launcherId === 'launcher-super-heavy' ? 1.3 : 1)), 1.75, 0);
-          lvGroup.add(booster);
-
-          const nose = new THREE.Mesh(new THREE.ConeGeometry(boosterScale, 0.6, 16), accentMat);
-          nose.position.set(side * (0.98 * (launcherId === 'launcher-super-heavy' ? 1.3 : 1)), 3.6, 0);
-          lvGroup.add(nose);
-
-          const bNozzle = new THREE.Mesh(new THREE.ConeGeometry(boosterScale * 0.75, 0.45, 14), engineMat);
-          bNozzle.position.set(side * (0.98 * (launcherId === 'launcher-super-heavy' ? 1.3 : 1)), 0.05, 0);
-          lvGroup.add(bNozzle);
-        }
-      } else if (launcherId === 'launcher-medium-heavy') {
-        // Medium-Heavy has 2 smaller strap-on boosters
-        for (const side of [-1, 1]) {
-          const booster = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.24, 0.26, 2.8, 12),
-            hullMat
-          );
-          booster.position.set(side * 0.88, 1.6, 0);
-          lvGroup.add(booster);
-
-          const nose = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.5, 12), accentMat);
-          nose.position.set(side * 0.88, 3.3, 0);
-          lvGroup.add(nose);
-
-          const bNozzle = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.4, 10), engineMat);
-          bNozzle.position.set(side * 0.88, 0.05, 0);
-          lvGroup.add(bNozzle);
-        }
-      }
-
-      // Main Engine Bell
-      const bell = new THREE.Mesh(
-        new THREE.ConeGeometry(0.36 * lvScaleW, 0.55, 18),
-        engineMat
-      );
-      bell.position.y = 0.05;
-      lvGroup.add(bell);
+      addStage1Geometry(lvGroup, launcherId, lvScaleW, mats, 0);
     }
 
-    // Interstage + Stage 2
-    const s2 = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.48 * lvScaleW, 0.54 * lvScaleW, 1.55, 24),
-      hullMat
-    );
-    s2.position.y = 4.65;
+    // Stage 2, 4.22..5.47 (sits on the interstage)
+    const R2 = 0.55 * lvScaleW;
+    const s2 = new THREE.Mesh(new THREE.CylinderGeometry(R2, R2, 1.25, 32), hullMat);
+    s2.position.y = 4.845;
     lvGroup.add(s2);
 
-    const s2Bell = new THREE.Mesh(
-      new THREE.ConeGeometry(0.25 * lvScaleW, 0.35, 14),
-      engineMat
+    const s2Stripe = new THREE.Mesh(
+      new THREE.CylinderGeometry(R2 * 1.006, R2 * 1.006, 0.07, 32),
+      mats.orange
     );
-    s2Bell.position.y = 3.78;
-    lvGroup.add(s2Bell);
+    s2Stripe.position.y = 5.3;
+    lvGroup.add(s2Stripe);
+
+    // Payload adapter cone (carbon)
+    const adapter = new THREE.Mesh(
+      new THREE.CylinderGeometry(R2 * 0.7, R2, 0.07, 32),
+      mats.carbon
+    );
+    adapter.position.y = 5.505;
+    lvGroup.add(adapter);
+
+    // Vacuum engine: hidden inside the interstage until stage 1 drops
+    addEngineCluster(lvGroup, mats, R2 * 0.85, false, 4.2);
 
     root.add(lvGroup);
   }
@@ -1717,4 +1864,152 @@ export function createParticleSystem(
   };
 
   return system;
+}
+
+// ---------------------------------------------------------------------------
+// Launch complex. Origin = rocket base, +Y up, ground at y = 0, tallest tower
+// top at y = 1.0. Clear radius 0.12 around origin. Children 'pad-arm-1',
+// 'pad-arm-2' (hinge at tower, rotate .y to swing away) and 'pad-clamps'.
+// ---------------------------------------------------------------------------
+export function createLaunchPadModel(): THREE.Group {
+  const root = new THREE.Group();
+  root.name = 'launch-pad-model';
+
+  const concreteMat = new THREE.MeshStandardMaterial({ color: '#b9b7b2', roughness: 0.9, metalness: 0.0 });
+  const concreteDarkMat = new THREE.MeshStandardMaterial({ color: '#8f8d88', roughness: 0.95, metalness: 0.0 });
+  const trenchMat = new THREE.MeshStandardMaterial({ color: '#0c0c0d', roughness: 1.0, metalness: 0.0 });
+  const towerMat = new THREE.MeshStandardMaterial({ color: '#a8401f', roughness: 0.55, metalness: 0.5 });
+  const steelMat = new THREE.MeshStandardMaterial({ color: '#8a8f96', roughness: 0.45, metalness: 0.6 });
+  const clampMat = new THREE.MeshStandardMaterial({ color: '#3d4045', roughness: 0.5, metalness: 0.6 });
+  const lampMat = new THREE.MeshStandardMaterial({
+    color: '#fff1c9', emissive: '#ffcf80', emissiveIntensity: 2.2, roughness: 0.4, metalness: 0.0,
+  });
+
+  const add = (parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.castShadow = false;
+    m.receiveShadow = false;
+    parent.add(m);
+    return m;
+  };
+
+  // Pad slab: beveled concrete disc (lower wide skirt + slightly narrower top).
+  const slabH = 0.03;
+  add(root, new THREE.CylinderGeometry(0.53, 0.55, slabH * 0.7, 64), concreteMat, 0, slabH * 0.35, 0);
+  add(root, new THREE.CylinderGeometry(0.515, 0.53, slabH * 0.3, 64), concreteMat, 0, slabH * 0.85, 0);
+  // Inner pedestal ring around the rocket.
+  add(root, new THREE.CylinderGeometry(0.115, 0.125, 0.012, 48), concreteDarkMat, 0, slabH + 0.006, 0);
+
+  // Flame trench along +X: dark channel from under the rocket to the slab edge.
+  const trenchLen = 0.5;
+  const trench = add(root, new THREE.BoxGeometry(trenchLen, 0.004, 0.09), trenchMat, trenchLen / 2 + 0.02, slabH + 0.0015, 0);
+  trench.name = 'pad-flame-trench';
+  // Trench lip walls.
+  add(root, new THREE.BoxGeometry(trenchLen, 0.01, 0.008), concreteDarkMat, trenchLen / 2 + 0.02, slabH + 0.005, 0.049);
+  add(root, new THREE.BoxGeometry(trenchLen, 0.01, 0.008), concreteDarkMat, trenchLen / 2 + 0.02, slabH + 0.005, -0.049);
+  // Dark exhaust hole directly under the rocket.
+  add(root, new THREE.CylinderGeometry(0.06, 0.06, 0.004, 32), trenchMat, 0, slabH + 0.0135, 0);
+
+  // Lattice service tower, centered at x = -0.22.
+  const tower = new THREE.Group();
+  tower.name = 'pad-tower';
+  tower.position.set(-0.22, 0, 0);
+  root.add(tower);
+  const towerTop = 1.0;
+  const mastH = 0.06;
+  const legTop = towerTop - mastH; // lattice height; mast reaches exactly 1.0
+  const half = 0.045;
+  const beam = 0.008;
+  const legH = legTop - slabH;
+  const corners: Array<[number, number]> = [[-half, -half], [half, -half], [half, half], [-half, half]];
+  for (const [cx, cz] of corners) {
+    add(tower, new THREE.BoxGeometry(beam * 1.4, legH, beam * 1.4), towerMat, cx, slabH + legH / 2, cz);
+  }
+  const step = 0.12;
+  const levels: number[] = [];
+  for (let y = slabH; y <= legTop + 1e-6; y += step) levels.push(y);
+  if (legTop - levels[levels.length - 1] > 0.02) levels.push(legTop);
+  const span = half * 2;
+  for (const y of levels) {
+    add(tower, new THREE.BoxGeometry(span, beam, beam), towerMat, 0, y, -half);
+    add(tower, new THREE.BoxGeometry(span, beam, beam), towerMat, 0, y, half);
+    add(tower, new THREE.BoxGeometry(beam, beam, span), towerMat, -half, y, 0);
+    add(tower, new THREE.BoxGeometry(beam, beam, span), towerMat, half, y, 0);
+  }
+  // Diagonal braces on each face, alternating direction per bay.
+  for (let i = 0; i < levels.length - 1; i++) {
+    const y0 = levels[i];
+    const y1 = levels[i + 1];
+    const dy = y1 - y0;
+    const len = Math.hypot(span, dy);
+    const ang = Math.atan2(dy, span) * (i % 2 === 0 ? 1 : -1);
+    const ym = (y0 + y1) / 2;
+    // Faces normal to Z (brace lies in XY plane).
+    for (const z of [-half, half]) {
+      const b = add(tower, new THREE.BoxGeometry(len, beam * 0.7, beam * 0.7), towerMat, 0, ym, z);
+      b.rotation.z = ang;
+    }
+    // Faces normal to X (brace lies in ZY plane).
+    for (const x of [-half, half]) {
+      const b = add(tower, new THREE.BoxGeometry(beam * 0.7, beam * 0.7, len), towerMat, x, ym, 0);
+      b.rotation.x = -ang;
+    }
+  }
+  // Top deck and lightning mast (tip at y = 1.0 exactly).
+  add(tower, new THREE.BoxGeometry(span + 0.02, 0.008, span + 0.02), steelMat, 0, legTop + 0.004, 0);
+  add(tower, new THREE.CylinderGeometry(0.0025, 0.004, mastH - 0.008, 8), steelMat, 0, legTop + 0.008 + (mastH - 0.008) / 2, 0);
+
+  // Swing arms: hinge at the tower's rocket-facing face (+X side), reaching toward origin.
+  const hingeX = -0.22 + half;
+  const armReach = Math.abs(hingeX) - 0.115; // stop just short of the rocket clear circle
+  const makeArm = (name: string, y: number): void => {
+    const arm = new THREE.Group();
+    arm.name = name;
+    arm.position.set(hingeX, y, 0);
+    add(arm, new THREE.BoxGeometry(armReach, 0.014, 0.022), towerMat, armReach / 2, 0, 0);
+    add(arm, new THREE.BoxGeometry(armReach, 0.004, 0.026), steelMat, armReach / 2, 0.009, 0);
+    // Umbilical plate at the rocket end.
+    add(arm, new THREE.BoxGeometry(0.008, 0.03, 0.03), clampMat, armReach, 0, 0);
+    // Hinge pin.
+    add(arm, new THREE.CylinderGeometry(0.006, 0.006, 0.03, 10), steelMat, 0, 0, 0);
+    root.add(arm);
+  };
+  makeArm('pad-arm-1', 0.55);
+  makeArm('pad-arm-2', 0.85);
+
+  // Hold-down clamps at the rocket base (four, just outside the clear circle).
+  const clamps = new THREE.Group();
+  clamps.name = 'pad-clamps';
+  root.add(clamps);
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    const r = 0.135;
+    const c = new THREE.Group();
+    c.position.set(Math.cos(a) * r, slabH + 0.012, Math.sin(a) * r);
+    c.rotation.y = -a;
+    add(c, new THREE.BoxGeometry(0.022, 0.024, 0.02), clampMat, 0, 0, 0);
+    const jaw = add(c, new THREE.BoxGeometry(0.014, 0.008, 0.016), steelMat, -0.012, 0.012, 0);
+    jaw.rotation.z = 0.35;
+    clamps.add(c);
+  }
+
+  // Floodlight poles with emissive heads (no real lights).
+  const poles: Array<[number, number]> = [[0.36, 0.3], [0.3, -0.36], [-0.4, -0.25]];
+  for (const [px, pz] of poles) {
+    const poleH = 0.32;
+    add(root, new THREE.CylinderGeometry(0.004, 0.006, poleH, 8), steelMat, px, slabH + poleH / 2, pz);
+    const head = new THREE.Group();
+    head.position.set(px, slabH + poleH, pz);
+    head.lookAt(0, 0.3, 0);
+    add(head, new THREE.BoxGeometry(0.03, 0.02, 0.012), clampMat, 0, 0, 0);
+    add(head, new THREE.BoxGeometry(0.026, 0.016, 0.002), lampMat, 0, 0, 0.007);
+    root.add(head);
+  }
+
+  root.traverse((o) => {
+    o.castShadow = false;
+    o.receiveShadow = false;
+  });
+  return root;
 }

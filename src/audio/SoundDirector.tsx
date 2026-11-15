@@ -45,6 +45,13 @@ export const SoundDirector: FC = () => {
         if (s.phase !== 'FLIGHT') engine.setRumble(0);
       }
 
+      if (s.phase === 'HANGAR' && prev.phase === 'HANGAR' && s.spacecraft !== prev.spacecraft) {
+        const keys = Object.keys(s.spacecraft) as (keyof typeof s.spacecraft)[];
+        const changed = keys.filter((k) => s.spacecraft[k] !== prev.spacecraft[k] && s.spacecraft[k]).length;
+        if (changed >= 3) engine.assembled();
+        else if (changed > 0) engine.equip();
+      }
+
       const f = s.flight;
       const pf = prev.flight;
       if (s.phase === 'FLIGHT' && f) {

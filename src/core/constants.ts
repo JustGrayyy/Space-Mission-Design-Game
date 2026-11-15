@@ -19,7 +19,9 @@ export const EARTH_MU = 3.84e12;
 export const EARTH_ATM_TOP_M = 80_000;
 export const EARTH_SCALE_HEIGHT_M = 11_000;
 export const EARTH_RHO0 = 1.225;
-export const EARTH_ROT_RATE = (2 * Math.PI) / 1800; // 30-min scaled Earth day
+// 4-hour scaled day. It was 30 min, shorter than one low orbit (~34 min), so Earth
+// visibly spun under a rocket that had barely climbed. Real Earth turns once per ~16 orbits.
+export const EARTH_ROT_RATE = (2 * Math.PI) / 14400;
 
 export const MOON_ORBIT_M = 3_200_000;
 export const MOON_RADIUS_M = 160_000;

@@ -448,3 +448,36 @@ describe('physicsEngine core mechanics', () => {
     expect(debrief.resources.time.realisticMetrics).toMatch(/Peak Power: 450 W/);
   });
 });
+
+describe('launch site and Earth spin', () => {
+  const craft = RECOMMENDED_LOADOUTS.EARTH_OBSERVATION;
+  const ground = RECOMMENDED_GROUND.EARTH_OBSERVATION;
+  const eastwardSpeedAfterLiftoff = (siteId: string) => {
+    let s = createInitialFlightState('EARTH_OBSERVATION', craft, ground, true, siteId);
+    s = stepFlightSimulation(s, 'EARTH_OBSERVATION', craft, ground,
+      { throttle: 1, pitchInput: 0, yawInput: 0, autoGuidance: true }, 0.5, 'BEGINNER');
+    const up = { x: s.position.x, y: s.position.y, z: s.position.z };
+    const r = Math.hypot(up.x, up.y, up.z);
+    const east = { x: -up.z / r, z: up.x / r };
+    const norm = Math.hypot(east.x, east.z);
+    return (s.velocity.x * east.x + s.velocity.z * east.z) / norm;
+  };
+
+  it('gives a rocket eastward speed from Earth spin, more near the equator', () => {
+    const guiana = eastwardSpeedAfterLiftoff('guiana-space-centre'); // 5° N
+    const baikonur = eastwardSpeedAfterLiftoff('baikonur'); // 46° N
+    expect(guiana).toBeGreaterThan(100);
+    expect(guiana).toBeGreaterThan(baikonur * 1.3);
+  });
+
+  it('keeps a rocket on the pad turning with the Earth before launch', () => {
+    let s = createInitialFlightState('EARTH_OBSERVATION', craft, ground, false);
+    const before = { ...s.position };
+    s = stepFlightSimulation(s, 'EARTH_OBSERVATION', craft, ground,
+      { throttle: 0, pitchInput: 0, yawInput: 0, autoGuidance: false }, 60, 'REALISTIC');
+    expect(s.status).toBe('PRELAUNCH');
+    const moved = Math.hypot(s.position.x - before.x, s.position.z - before.z);
+    expect(moved).toBeGreaterThan(1000);
+    expect(Math.hypot(s.position.x, s.position.y, s.position.z)).toBeCloseTo(Math.hypot(before.x, before.y, before.z), 0);
+  });
+});

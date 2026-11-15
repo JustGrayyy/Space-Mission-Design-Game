@@ -29,6 +29,13 @@ import {
   PARTS_BY_ID,
   SUN_DIRECTION,
 } from './constants';
+
+/**
+ * Eastward speed a rocket inherits from Earth's spin at the equator.
+ * Real Earth: 465 m/s, about 6% of low-orbit speed (7.8 km/s). The game's Earth is
+ * scaled down, so the same 6% share of its 2.3 km/s orbit speed is used here.
+ */
+export const LAUNCH_SPIN_BOOST_MS = 465.1 * (2310 / 7800);
 import type {
   AnomalyEvent,
   DifficultyMode,
@@ -783,7 +790,14 @@ export function stepFlightSimulation(
         status = 'ASCENT';
         pushEvent(events, elapsed, 'MILESTONE', 'Liftoff! Booster ignition confirmed.');
       } else {
-        // Keep sitting on pad
+        // Sit on the pad and turn with the Earth (the pad is bolted to a spinning planet).
+        const a = EARTH_ROT_RATE * h;
+        pos = {
+          x: pos.x * Math.cos(a) - pos.z * Math.sin(a),
+          y: pos.y,
+          z: pos.x * Math.sin(a) + pos.z * Math.cos(a),
+        };
+        heading = vecNorm(pos);
         elapsed += h;
         continue;
       }
@@ -1057,6 +1071,12 @@ export function stepFlightSimulation(
         break;
       }
     } else if (!landedOnTarget) {
+      // Leaving the pad: the rocket keeps the eastward speed the spinning ground gave it,
+      // largest at the equator (why launch sites near it are prized).
+      if (alt <= 1 && vecLen(vel) < 1 && enteredOrbitAtSec === null) {
+        const spin = vecScale(east, LAUNCH_SPIN_BOOST_MS * Math.hypot(pos.x, pos.z) / Math.max(1, r));
+        vel = vecAdd(vel, spin);
+      }
       // Velocity-Verlet integration
       const halfVel = vecAdd(vel, vecScale(totalAccel, 0.5 * h));
       const nextPos = vecAdd(pos, vecScale(halfVel, h));

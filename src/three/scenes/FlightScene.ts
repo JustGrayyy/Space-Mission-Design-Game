@@ -29,6 +29,7 @@ import type { SubsystemCategory, Vec3, FlightState } from '../../core/types';
 import { useMissionStore } from '../../store/useMissionStore';
 import {
   createConeBeam,
+  createLaunchPadModel,
   createPlanetMesh,
   createRocketStackGroup,
   createSpentStage1Mesh,
@@ -40,6 +41,26 @@ import type { SceneController } from './SceneController';
 
 const WORLD_SCALE = 1 / 10_000;
 const UP_Y = new THREE.Vector3(0, 1, 0);
+
+/** Height of the visible meshes along the object's own up axis (ignores hidden plume/smoke). */
+function visibleHeight(obj: THREE.Object3D): number {
+  obj.updateWorldMatrix(true, true);
+  const inv = new THREE.Matrix4().copy(obj.matrixWorld).invert();
+  const box = new THREE.Box3();
+  const tmp = new THREE.Box3();
+  const scale = new THREE.Vector3();
+  obj.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
+  obj.traverse((o) => {
+    let v = true;
+    for (let a: THREE.Object3D | null = o; a && a !== obj.parent; a = a.parent) if (!a.visible) v = false;
+    const mesh = o as THREE.Mesh;
+    if (!v || !mesh.isMesh || !mesh.geometry) return;
+    mesh.geometry.computeBoundingBox();
+    tmp.copy(mesh.geometry.boundingBox!).applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, mesh.matrixWorld));
+    box.union(tmp);
+  });
+  return box.isEmpty() ? 0 : (box.max.y - box.min.y) * scale.y;
+}
 
 function toWorld(v: Vec3): THREE.Vector3 {
   return new THREE.Vector3(v.x * WORLD_SCALE, v.y * WORLD_SCALE, v.z * WORLD_SCALE);
@@ -74,6 +95,36 @@ export class FlightScene implements SceneController {
   private moon!: THREE.Group;
   private mars!: THREE.Group;
   private padTower!: THREE.Group;
+  /** Turns with the Earth so the pad (and the rocket on it) stays put on the ground. */
+  private padPivot = new THREE.Group();
+  /** Smoothed "up" for the camera, so it never flips when the reference body changes. */
+  private camUp = new THREE.Vector3(0, 1, 0);
+  private shake = 0;
+  private smoke = new THREE.Group();
+  private smokeT = -1;
+  private sepFlash = (() => {
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.5, 16, 12),
+      new THREE.MeshBasicMaterial({ color: '#fff1d6', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })
+    );
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.8, 0.05, 8, 48),
+      new THREE.MeshBasicMaterial({ color: '#ff9a4d', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })
+    );
+    ring.rotation.x = Math.PI / 2;
+    g.add(core, ring);
+    g.visible = false;
+    return g;
+  })();
+  private sepT = -1;
+  /** Engine power as the player sees it: eases toward the autopilot's command (no snapping). */
+  private shownThrottle = 0;
+  /** Player zoomed by hand: stop the automatic launch-to-orbit camera pull-back. */
+  private userZoomed = false;
+  /** Tower size relative to the rocket, measured once so the pad always matches it. */
+  private padK = 0;
+  private padRelease = 0;
 
   private craftPivot = new THREE.Group();
   private craftVisual: THREE.Group | null = null;
@@ -109,19 +160,22 @@ export class FlightScene implements SceneController {
   mount(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void {
     this.scene = scene;
     this.camera = camera;
-    this.camera.near = 0.25;
+    this.camera.near = 0.05; // close enough for the low launch shot
     this.camera.far = 6500;
     this.camera.updateProjectionMatrix();
 
     this.scene.add(this.root);
 
     // Lighting matching SUN_DIRECTION (+X)
-    const ambient = new THREE.AmbientLight('#435e86', 0.72);
-    const sun = new THREE.DirectionalLight('#fff8ea', 2.6);
+    // Space lighting: one strong warm sun, a soft sky/ground bounce so the night side
+    // is dark but readable, and a cool rim so the rocket's edges catch the light.
+    const ambient = new THREE.AmbientLight('#1b2233', 0.35);
+    const sky = new THREE.HemisphereLight('#9cc8ff', '#2a1a10', 0.55);
+    const sun = new THREE.DirectionalLight('#fff1dc', 3.4);
     sun.position.set(SUN_DIRECTION.x * 1200, 140, 200);
-    const fill = new THREE.DirectionalLight('#38bdf8', 0.45);
-    fill.position.set(-400, -100, -200);
-    this.root.add(ambient, sun, fill);
+    const rim = new THREE.DirectionalLight('#8fb8ff', 0.9);
+    rim.position.set(-400, 120, -260);
+    this.root.add(ambient, sky, sun, rim);
 
     // Deep space starfield
     this.root.add(createStarfield(1800, 3400));
@@ -157,10 +211,24 @@ export class FlightScene implements SceneController {
     const launchSite = LAUNCH_SITES_BY_ID[launchSiteId] ?? LAUNCH_SITES_BY_ID[DEFAULT_LAUNCH_SITE_ID];
     const launchPos = getSurfacePosition(launchSite.latDeg, launchSite.lonDeg);
     const launchNormal = toWorld(launchPos).normalize();
-    this.padTower = this.createLaunchpadTower();
-    this.padTower.position.copy(toWorld(launchPos));
+    this.padTower = createLaunchPadModel();
+    // Sink the slab a hair into the ground so no gap shows between pad and Earth.
+    this.padTower.position.copy(toWorld(launchPos)).addScaledVector(launchNormal, -0.004);
     this.padTower.quaternion.setFromUnitVectors(UP_Y, launchNormal);
-    this.root.add(this.padTower);
+    this.padPivot.add(this.padTower);
+    // Launch smoke puffs, hidden until ignition.
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 + Math.random() * 0.3;
+      const puff = new THREE.Mesh(
+        new THREE.SphereGeometry(0.075, 10, 8),
+        new THREE.MeshBasicMaterial({ color: '#e8e2d8', transparent: true, opacity: 0, depthWrite: false })
+      );
+      puff.userData.dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+      this.smoke.add(puff);
+    }
+    this.smoke.visible = false;
+    this.padTower.add(this.smoke);
+    this.root.add(this.padPivot);
 
     // Spacecraft Pivot + Exhaust Plume + Sensor Cone
     this.plume = createExhaustPlume();
@@ -172,6 +240,7 @@ export class FlightScene implements SceneController {
     this.root.add(this.sensorCone);
 
     this.root.add(this.craftPivot);
+    this.root.add(this.sepFlash);
 
     // AP / PE Markers
     this.apMarker = new THREE.Mesh(
@@ -199,6 +268,8 @@ export class FlightScene implements SceneController {
     this.orbitLine.frustumCulled = false;
     this.orbitLine.renderOrder = 2; // Above atmosphere halos (renderOrder 1)
     this.root.add(this.orbitLine);
+    // Predicted-path lines confused players more than they helped, so they stay hidden.
+    this.orbitLine.visible = false;
 
     // Preallocate descent trajectory line
     const descentGeom = new THREE.BufferGeometry();
@@ -211,6 +282,7 @@ export class FlightScene implements SceneController {
     this.descentLine.frustumCulled = false;
     this.descentLine.renderOrder = 2;
     this.root.add(this.descentLine);
+    this.descentLine.visible = false;
 
     // Preallocate landing target marker
     this.descentTargetMarker = new THREE.Mesh(
@@ -250,26 +322,6 @@ export class FlightScene implements SceneController {
     this.update(0, 0);
   }
 
-  private createLaunchpadTower(): THREE.Group {
-    const grp = new THREE.Group();
-    const steelMat = new THREE.MeshStandardMaterial({
-      color: '#475569',
-      metalness: 0.7,
-      roughness: 0.4,
-    });
-    const padBase = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.8, 0.35, 16), steelMat);
-    padBase.position.y = 0.15;
-    const mast = new THREE.Mesh(new THREE.BoxGeometry(0.42, 3.8, 0.42), steelMat);
-    mast.position.set(-0.95, 1.9, -0.6);
-    const arm = new THREE.Mesh(
-      new THREE.BoxGeometry(1.1, 0.12, 0.16),
-      new THREE.MeshStandardMaterial({ color: '#f59e0b' })
-    );
-    arm.position.set(-0.4, 3.1, -0.3);
-    grp.add(padBase, mast, arm);
-    return grp;
-  }
-
   private rebuildCraftMesh(stageIdx: 0 | 1): void {
     const state = useMissionStore.getState();
     if (this.craftVisual) {
@@ -300,12 +352,22 @@ export class FlightScene implements SceneController {
 
   private spawnSpentStage1(craftWorldPos: THREE.Vector3, headingVec: THREE.Vector3): void {
     const booster = createSpentStage1Mesh(this.builtLauncherId);
-    booster.scale.setScalar(0.32);
+    // Match the rocket's on-screen size, so the booster doesn't shrink as it separates.
+    booster.scale.setScalar(this.craftPivot.scale.x * 0.32);
+    // Separation flash + expanding ring at the joint.
+    this.sepFlash.position.copy(craftWorldPos);
+    this.sepFlash.quaternion.setFromUnitVectors(UP_Y, headingVec);
+    this.sepFlash.visible = true;
+    this.sepT = 0;
     booster.position.copy(craftWorldPos);
     booster.quaternion.setFromUnitVectors(UP_Y, headingVec);
     this.root.add(booster);
 
-    const sepVel = headingVec.clone().multiplyScalar(-1.6).add(new THREE.Vector3(0, -0.5, 0.4));
+    // Drift backward and to the side, so the player sees it fall away.
+    const side = new THREE.Vector3().crossVectors(headingVec, UP_Y);
+    if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+    side.normalize();
+    const sepVel = headingVec.clone().multiplyScalar(-0.9).addScaledVector(side, 0.35);
     this.spentBoosters.push({
       mesh: booster,
       vel: sepVel,
@@ -544,6 +606,7 @@ export class FlightScene implements SceneController {
 
     // Planets rotation & ephemeris
     this.earth.rotation.y = -EARTH_ROT_RATE * flElapsed;
+    this.padPivot.rotation.y = this.earth.rotation.y;
     const moon = getMoonState(flElapsed);
     const mars = getMarsState(flElapsed);
     this.moon.position.copy(toWorld(moon.pos));
@@ -578,9 +641,37 @@ export class FlightScene implements SceneController {
       this.craftPivot.quaternion.setFromUnitVectors(UP_Y, headingVec);
     }
 
+    // Cinematic framing: start close on the pad, pull back as the rocket climbs.
+    if (!this.userZoomed) {
+      const altKm = Math.max(0, flight.orbitalElements.altitudeM) / 1000;
+      const k = Math.min(1, altKm / 160);
+      const target = 3.2 + 18.8 * (k * k * (3 - 2 * k));
+      this.distance += (target - this.distance) * Math.min(1, dt * 1.2);
+    }
     // Visual scale keeps craft clearly visible even when camera zoomed out
-    const visualScale = Math.max(0.45, Math.min(3.4, this.distance * 0.036));
+    const visualScale = Math.max(0.12, Math.min(3.4, this.distance * 0.036));
     this.craftPivot.scale.setScalar(visualScale);
+
+    // Size the launch tower from the rocket's real on-screen height, once.
+    if (!this.padK) {
+      const rocketH = visibleHeight(this.craftPivot);
+      this.padTower.scale.setScalar(1);
+      const towerH = visibleHeight(this.padTower);
+      if (rocketH > 0 && towerH > 0) this.padK = (1.12 * rocketH) / (towerH * visualScale);
+    }
+    if (this.padK) this.padTower.scale.setScalar(this.padK * visualScale);
+
+    // Liftoff: the swing arms pull away and the hold-down clamps fold back.
+    if (flight.status !== 'PRELAUNCH') {
+      this.padRelease = Math.min(1, this.padRelease + dt / 1.6);
+      const e = 1 - Math.pow(1 - this.padRelease, 3);
+      const arm1 = this.padTower.getObjectByName('pad-arm-1');
+      const arm2 = this.padTower.getObjectByName('pad-arm-2');
+      if (arm1) arm1.rotation.y = -1.35 * e;
+      if (arm2) arm2.rotation.y = 1.35 * e;
+      const clamps = this.padTower.getObjectByName('pad-clamps');
+      if (clamps) clamps.scale.y = 1 - 0.85 * e;
+    }
 
     // Exhaust plume update
     const currentProp =
@@ -592,10 +683,54 @@ export class FlightScene implements SceneController {
       flight.status !== 'SUCCESS' &&
       flight.status !== 'FAILED';
     const inVacuum = flight.orbitalElements.altitudeM > EARTH_ATM_TOP_M * 0.7;
+    const cmd = hasThrust ? flight.throttle : 0;
+    this.shownThrottle += (cmd - this.shownThrottle) * Math.min(1, dt * 2.2);
+    const lowAlt = Math.max(0, 1 - flight.orbitalElements.altitudeM / 30_000);
+    // Shake scales with camera distance so it reads the same up close and far away.
+    const targetShake = hasThrust ? 0.0045 * this.distance * lowAlt * this.shownThrottle : 0;
+    this.shake += (targetShake - this.shake) * Math.min(1, dt * 6);
     const plumeUpdater = this.plume.userData.update as
       | ((t: number, vac: boolean, e: number) => void)
       | undefined;
-    plumeUpdater?.(hasThrust ? flight.throttle : 0, inVacuum, elapsed);
+    plumeUpdater?.(this.shownThrottle, inVacuum, elapsed);
+    // A big, flickering plume: the reward moment. It swells in thin air, like real exhaust.
+    const flicker = 1 + Math.sin(elapsed * 38) * 0.06 + Math.sin(elapsed * 23) * 0.04;
+    const plumeSize = (inVacuum ? 1.15 : 0.75 + 0.25 * (1 - lowAlt)) * flicker * (0.35 + 0.65 * this.shownThrottle);
+    // Near the pad the flame is short (it hits the flame trench), so it never pokes through the ground.
+    const groundClip = Math.min(1, Math.max(0.02, flight.orbitalElements.altitudeM / 380));
+    this.plume.scale.set(plumeSize, plumeSize * groundClip, plumeSize);
+
+    // Launch smoke: billows out from the pad for a few seconds after ignition.
+    if (hasThrust && flight.orbitalElements.altitudeM < 400 && this.smokeT < 0) this.smokeT = 0;
+    if (this.smokeT >= 0) {
+      this.smokeT += dt;
+      const k = this.smokeT / 7;
+      this.smoke.visible = k < 1;
+      this.smoke.children.forEach((puff, i) => {
+        const m = puff as THREE.Mesh;
+        const dir = puff.userData.dir as THREE.Vector3;
+        const reach = (1 - Math.exp(-this.smokeT * 0.9)) * (0.3 + (i % 3) * 0.09);
+        m.position.set(dir.x * reach, 0.03 + this.smokeT * 0.012 * (1 + (i % 2)), dir.z * reach);
+        m.scale.setScalar(0.5 + this.smokeT * 0.35);
+        (m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.42 * (1 - k));
+      });
+    }
+
+    // Separation flash: a quick bright pop and a ring that spreads out, then fades.
+    if (this.sepT >= 0) {
+      this.sepT += dt;
+      const k = Math.min(1, this.sepT / 0.9);
+      const [core, ring] = this.sepFlash.children as THREE.Mesh[];
+      const sc = this.craftPivot.scale.x;
+      core.scale.setScalar(sc * (0.6 + k * 1.6));
+      ring.scale.setScalar(sc * (0.5 + k * 3.5));
+      (core.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - k) * (1 - k);
+      (ring.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - k);
+      if (k >= 1) {
+        this.sepFlash.visible = false;
+        this.sepT = -1;
+      }
+    }
 
     // Spent booster tumbling physics
     for (let i = this.spentBoosters.length - 1; i >= 0; i--) {
@@ -704,23 +839,70 @@ export class FlightScene implements SceneController {
       this.yaw += dt * 0.25;
     }
 
-    // Chase camera around spacecraft
-    const horiz = Math.cos(this.pitch) * this.distance;
-    const camOffset = new THREE.Vector3(
-      Math.cos(this.yaw) * horiz,
-      Math.sin(this.pitch) * this.distance,
-      Math.sin(this.yaw) * horiz
-    );
-    this.camera.position.copy(craftWorldPos).add(camOffset);
+    // Chase camera, built in the rocket's LOCAL frame: "up" points away from the
+    // nearest planet, so the rocket stands upright on screen and the ground stays below.
+    const bodies = [
+      { c: new THREE.Vector3(0, 0, 0), r: EARTH_RADIUS_M * WORLD_SCALE },
+      { c: this.moon.position, r: MOON_RADIUS_M * WORLD_SCALE },
+      { c: this.mars.position, r: MARS_RADIUS_M * WORLD_SCALE },
+    ];
+    let body = bodies[0];
+    let bestGap = Infinity;
+    for (const b of bodies) {
+      const gap = craftWorldPos.distanceTo(b.c) - b.r;
+      if (gap < bestGap) {
+        bestGap = gap;
+        body = b;
+      }
+    }
+    const localUp = craftWorldPos.clone().sub(body.c).normalize();
+    this.camUp.lerp(localUp, 1 - Math.exp(-dt * 3)).normalize();
+    let east = new THREE.Vector3().crossVectors(UP_Y, this.camUp);
+    if (east.lengthSq() < 1e-6) east = new THREE.Vector3(1, 0, 0);
+    east.normalize();
+    const north = new THREE.Vector3().crossVectors(this.camUp, east).normalize();
+    // Launch cinematic: a low angle beside the pad looking up, with a slow drift, so you
+    // see the rocket lift off the pad against the sky. It eases back to normal by 6 km.
+    const altM = Math.max(0, flight.orbitalElements.altitudeM);
+    const launchBlend = this.userZoomed ? 0 : Math.max(0, 1 - altM / 6000);
+    const ease = launchBlend * launchBlend * (3 - 2 * launchBlend);
+    const pitch = Math.max(0.035, Math.max(0.12, this.pitch) * (1 - ease) + 0.035 * ease);
+    if (ease > 0) this.yaw += dt * 0.05 * ease;
+    const horiz = Math.cos(pitch) * this.distance;
+    const camPos = craftWorldPos
+      .clone()
+      .addScaledVector(this.camUp, Math.sin(pitch) * this.distance)
+      .addScaledVector(east, Math.cos(this.yaw) * horiz)
+      .addScaledVector(north, Math.sin(this.yaw) * horiz);
+    // Never let the camera sink inside a planet.
+    for (const b of bodies) {
+      const fromC = camPos.clone().sub(b.c);
+      const minR = b.r + 0.03; // just above the ground (about 300 m in game scale)
+      if (fromC.length() < minR) camPos.copy(b.c).addScaledVector(fromC.normalize(), minR);
+    }
+    // Engine rumble shakes the camera a little at liftoff, fading with altitude.
+    if (this.shake > 0.001) {
+      camPos.x += (Math.random() - 0.5) * this.shake;
+      camPos.y += (Math.random() - 0.5) * this.shake;
+      camPos.z += (Math.random() - 0.5) * this.shake;
+    }
+    // Beginner: the highest/lowest-point markers are unlabeled balls that confuse new players.
+    if (state.difficulty === 'BEGINNER') {
+      this.apMarker.visible = false;
+      this.peMarker.visible = false;
+    }
+    this.camera.position.copy(camPos);
+    this.camera.up.copy(this.camUp);
     this.camera.lookAt(craftWorldPos);
   }
 
   onOrbitDelta(dx: number, dy: number): void {
     this.yaw += dx * 0.007;
-    this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch + dy * 0.006));
+    this.pitch = Math.max(0.12, Math.min(1.35, this.pitch + dy * 0.006));
   }
 
   onZoomDelta(deltaY: number): void {
+    this.userZoomed = true;
     this.distance = Math.max(4.5, Math.min(420, this.distance * (1 + deltaY * 0.001)));
   }
 

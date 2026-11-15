@@ -3577,3 +3577,198 @@ summary:focus-visible {
   height: 56px;
   flex-shrink: 0;
 }
+
+/* ---------- Part cards: plain trade-offs ---------- */
+.part-tradeoff {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 6px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.part-good {
+  color: #86efac;
+}
+
+.part-bad {
+  color: #fcd34d;
+}
+
+.part-tier-chip {
+  text-align: left;
+  align-items: flex-start;
+}
+
+.part-tier-chip.selected .part-chip-name::after {
+  content: '  ✓';
+  color: var(--signal);
+}
+
+/* ---------- Rocket stages panel ---------- */
+.stage-panel {
+  position: fixed;
+  left: 16px;
+  bottom: 20px;
+  width: 250px;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  background: var(--panel-solid);
+  border: 1px solid var(--panel-line);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 12;
+}
+
+.stage-panel-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--paper);
+}
+
+.stage-card {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-line);
+  transition: opacity 0.4s ease, border-color 0.3s ease;
+}
+
+.stage-card.burning {
+  border-color: var(--signal);
+  box-shadow: inset 0 0 0 1px var(--signal);
+}
+
+.stage-card.ready {
+  border-color: var(--panel-line-strong);
+}
+
+.stage-card.dropped {
+  opacity: 0.45;
+}
+
+.stage-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.stage-card-name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--paper);
+}
+
+.stage-card-state {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--paper-faint);
+  white-space: nowrap;
+}
+
+.stage-card.burning .stage-card-state {
+  color: var(--signal);
+}
+
+.stage-card-role {
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--paper-soft);
+}
+
+.stage-fuel-track {
+  margin-top: 8px;
+  height: 7px;
+  border-radius: 999px;
+  background: #0a0f1a;
+  overflow: hidden;
+}
+
+.stage-fuel-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--signal);
+  transition: width 0.3s linear;
+}
+
+.stage-card.dropped .stage-fuel-fill {
+  background: var(--paper-faint);
+}
+
+.engine-meter-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--paper-soft);
+}
+
+.stage-fuel-track.engine .stage-fuel-fill {
+  background: linear-gradient(90deg, #ffb347, #ff7a1a);
+}
+
+.throttle-slider.horizontal {
+  width: 100%;
+  writing-mode: horizontal-tb;
+  height: 22px;
+  accent-color: var(--signal);
+}
+
+.stage-panel .stage-trigger-btn {
+  width: 100%;
+  min-height: 40px;
+  font-size: 15px;
+}
+
+.flight-bottom-strip {
+  left: calc(50% + 120px);
+  width: min(820px, calc(100vw - 320px));
+}
+
+.title-credit {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--paper-faint);
+}
+
+.title-credit a {
+  color: var(--paper-soft);
+  text-underline-offset: 2px;
+}
+
+/* ---------- Realistic flight control guide ---------- */
+.manual-steer-hint {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--paper);
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-line);
+}
+
+.manual-steer-hint.warn {
+  border-color: rgba(251, 191, 36, 0.6);
+  color: #fde68a;
+}
+
+.manual-steer-hint kbd {
+  font-family: var(--font-data);
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--panel-line-strong);
+  background: var(--panel-solid);
+}

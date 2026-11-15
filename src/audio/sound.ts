@@ -143,6 +143,19 @@ class SoundEngine {
     }
   }
 
+  /** A part locking into place: a metallic clunk. */
+  equip(): void {
+    this.burst(0, 0.12, { from: 2600, to: 900, vol: 0.18, q: 3 });
+    this.tone(196, 0, 0.16, { type: 'square', vol: 0.05, glideTo: 150 });
+    this.tone(1568, 0.02, 0.12, { type: 'triangle', vol: 0.05 });
+  }
+
+  /** The whole spacecraft assembled: a rising run of clunks into a chord. */
+  assembled(): void {
+    for (let i = 0; i < 6; i++) this.burst(i * 0.07, 0.1, { from: 2200 + i * 150, to: 900, vol: 0.12, q: 3 });
+    [392, 523, 659, 784].forEach((f, i) => this.tone(f, 0.42 + i * 0.07, 0.6, { type: 'triangle', vol: 0.08 }));
+  }
+
   stage(): void {
     this.burst(0, 0.3, { from: 900, to: 120, vol: 0.35, q: 0.8 });
     this.tone(90, 0, 0.25, { vol: 0.25, glideTo: 45 });
@@ -367,8 +380,8 @@ class SoundEngine {
       this.rumble = { gain, filter, nodes: [src, sub] };
     }
     const t = this.ctx.currentTime;
-    this.rumble.gain.gain.setTargetAtTime(0.32 * level, t, 0.15);
-    this.rumble.filter.frequency.setTargetAtTime(140 + 420 * level, t, 0.2);
+    this.rumble.gain.gain.setTargetAtTime(0.32 * level, t, 0.6);
+    this.rumble.filter.frequency.setTargetAtTime(140 + 420 * level, t, 0.7);
   }
 }
 

@@ -8,6 +8,7 @@ import { useMissionStore } from '../store/useMissionStore';
 
 import { KapFace, type KapMood } from './KapFace';
 import { useTourVisible } from './KapTour';
+import { PART_PLAIN, usePartFocus } from './partPlain';
 
 /** Plays Kap's comm blip when the message changes (at most once every 1.5 s). */
 const KapChime: React.FC<{ headline: string; mood: KapMood }> = ({ headline, mood }) => {
@@ -36,6 +37,7 @@ export const KapCommsBubble: React.FC = () => {
   const [expanded, setExpanded] = useState(false);
   const store = useMissionStore.getState();
   const tourVisible = useTourVisible();
+  const focusPartId = usePartFocus((s) => s.partId);
 
   if (phase === 'TITLE') return null;
 
@@ -133,6 +135,11 @@ export const KapCommsBubble: React.FC = () => {
     } else {
       if (isBeginner) headline = 'Looks great! Everything is green. Next, pick where to launch.';
       action = { label: 'Next', run: store.rolloutToGround };
+    }
+    // Kap talks about the part you're looking at, unless there's a problem to flag first.
+    const focus = focusPartId ? PART_PLAIN[focusPartId] : null;
+    if (isBeginner && focus && !conflicts.some((c) => c.severity === 'CRITICAL')) {
+      headline = `${focus.name}: ${focus.good.toLowerCase()}. The catch: ${focus.bad.toLowerCase()}.`;
     }
   } else if (phase === 'LAUNCH_SITE') {
     action = { label: 'Continue', run: store.confirmLaunchSite };
