@@ -159,7 +159,8 @@ export const KapCommsBubble: React.FC = () => {
   }
   if (isBeginner && phase === 'FLIGHT' && flight) headline = plainFlight(headline);
 
-  if (tourVisible) return null;
+  // On the results screen the report and score speak for themselves; Kap would cover them.
+  if (tourVisible || phase === 'DEBRIEF') return null;
 
   return (
     <aside

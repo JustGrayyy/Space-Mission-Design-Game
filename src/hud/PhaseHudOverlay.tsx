@@ -18,6 +18,7 @@ import type {
 import { useMissionStore } from '../store/useMissionStore';
 import { MISSION_ORDER, MISSION_PLAIN } from './plainText';
 import { PART_PLAIN, usePartFocus } from './partPlain';
+import { ScoreCard } from './ScoreCard';
 
 function formatDeltaHtml(deltas: HoverDelta): React.ReactNode {
   const badges: React.ReactElement[] = [];
@@ -1079,6 +1080,8 @@ export const PhaseHudOverlay: React.FC = () => {
                 : debrief.headline}
             </h2>
           </div>
+
+          <ScoreCard />
 
           <div className="debrief-resource-grid">
             {keys.map((rk) => {

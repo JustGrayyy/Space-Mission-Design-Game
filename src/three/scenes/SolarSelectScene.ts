@@ -100,6 +100,7 @@ export class SolarSelectScene implements SceneController {
         transparent: true,
         opacity: 0.18,
         wireframe: true,
+        visible: false, // click target only: easier to hit than the planet, never drawn
       })
     );
     this.moonBeacon.position.copy(this.moonPos);
@@ -114,6 +115,7 @@ export class SolarSelectScene implements SceneController {
         transparent: true,
         opacity: 0.22,
         wireframe: true,
+        visible: false, // click target only: easier to hit than the planet, never drawn
       })
     );
     this.marsBeacon.position.copy(this.marsPos);
